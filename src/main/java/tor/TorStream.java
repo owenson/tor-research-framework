@@ -2,6 +2,8 @@ package tor;
 
 import tor.util.ByteFifo;
 
+import java.io.IOException;
+
 public class TorStream {
 
 	int streamId;
@@ -38,6 +40,11 @@ public class TorStream {
 		send.put(b);
 		circ.streamsSending.add(this); // add self to send queue
 	}
+
+    public void destroy() throws IOException {
+        circ.send(new byte[] {6}, TorCircuit.RELAY_END, false, (short)streamId);
+        circ.streams.remove(this);
+    }
 	
 	/**
 	 * Internal function - used to receive bytes to send

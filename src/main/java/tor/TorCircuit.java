@@ -129,7 +129,7 @@ public class TorCircuit {
 	 * @param payload Relay cell data
 	 * @return Constructed relay payload
 	 */
-	private byte[] buildRelay(TorHop toHop, int cmd, short stream, byte[] payload) {
+	protected byte[] buildRelay(TorHop toHop, int cmd, short stream, byte[] payload) {
 		byte [] fnl = new byte[509];
 		ByteBuffer buf = ByteBuffer.wrap(fnl);
 		buf.put((byte)cmd);
@@ -181,6 +181,10 @@ public class TorCircuit {
 		}
 		return data;
 	}
+
+    public TorHop getLastHop() {
+        return hops.get(hops.size()-1);
+    }
 	
 	/**
 	 * Sends an extend cell to extend the circuit to specified hop
@@ -192,7 +196,7 @@ public class TorCircuit {
 		if(state == STATE_DESTROYED)
 			throw new RuntimeException("Trying to use destroyed circuit");
 		
-		TorHop lastHop = hops.get(hops.size()-1);
+		TorHop lastHop = getLastHop();
 		
 		byte create[] =  createPayload(nextHop);
 		byte extend[] = new byte [4 + 2 + create.length + TorCrypto.HASH_LEN];
