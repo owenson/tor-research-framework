@@ -85,9 +85,7 @@ public class TorCircuit {
 			circuitToBuild.add(sock.getConsensus().getRouterByName(s));
 		}
 	}
-	
-	// WARN: TODO: fix biginteger byte length - remove/add sign byte
-	
+
 	/**
 	 * Sends a create cell to specified hop (usually first hop that we're already connected to)
 	 * 
