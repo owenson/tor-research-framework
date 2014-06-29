@@ -15,6 +15,9 @@ public class TorStream {
 
 	ByteFifo recv = new ByteFifo(4096);
 	TorStreamListener listener;
+
+    int recvWindow = 500;
+    final static int recvWindowIncrement = 50;
 	
 	public TorStream(int streamId, TorCircuit circ, TorStreamListener list) {
 		this.streamId = streamId;
@@ -78,7 +81,7 @@ public class TorStream {
 
         final int maxDataLen = 509-1-2-2-4-2;
         for(int i=0; i<Math.ceil(b.length/(double)maxDataLen)*maxDataLen; i+=maxDataLen) {
-            byte data[] = Arrays.copyOfRange(b, i, Math.max(b.length, i + maxDataLen));
+            byte data[] = Arrays.copyOfRange(b, i, Math.min(b.length, i + maxDataLen));
             circ.send(data, TorCircuit.RELAY_DATA, false, (short) streamId);
         }
 	}
@@ -86,7 +89,7 @@ public class TorStream {
     public void destroy() throws IOException {
         setState(STATES.DESTROYED);
         circ.send(new byte[] {6}, TorCircuit.RELAY_END, false, (short)streamId);
-        circ.streams.remove(this);
+        circ.streams.remove(new Integer(streamId));
     }
 	
 	/**
@@ -95,6 +98,16 @@ public class TorStream {
 	 * @param b Bytes
 	 */
 	protected void _putRecved(byte b[]) {
+        recvWindow--;
+        if(recvWindow < 450) {
+            try {
+                circ.send(new byte[] {00}, TorCircuit.RELAY_SENDME, false, (short)streamId);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            recvWindow += recvWindowIncrement;
+        }
+
 		recv.put(b);
 		if(listener != null)
 			listener.dataArrived(this);

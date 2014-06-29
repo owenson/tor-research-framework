@@ -9,6 +9,7 @@ import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.TreeMap;
 
@@ -26,6 +27,7 @@ public class TorCircuit {
 	public static final int RELAY_DATA = 2;
 	public static final int RELAY_END = 3;
 	public static final int RELAY_CONNECTED = 4;
+    public static final int RELAY_SENDME = 5;
 	public static final int RELAY_EXTEND = 6;
 	public static final int RELAY_EXTENDED = 7;
 	public static final int RELAY_EARLY = 9;
@@ -195,6 +197,8 @@ public class TorCircuit {
 	private byte[] decrypt(byte []data) {
 		for (int i = 0; i<hops.size(); i++) {
 			data = hops.get(i).decrypt(data);
+            if(data[1] == 0 && data[2] == 0) // recognised
+                return data; // TODO- also check hash!!
 		}
 		return data;
 	}
@@ -291,7 +295,10 @@ public class TorCircuit {
 	public void send(byte []payload, int relaytype, boolean early, short stream) throws IOException {
 		if(state == STATES.DESTROYED)
 			throw new RuntimeException("Trying to use destroyed circuit");
-		
+
+        if(relaytype == RELAY_DATA)
+            sendWindow--;
+
 		byte relcell[] = buildRelay(hops.get(hops.size() - 1), relaytype, stream, payload);
 		sock.sendCell(circId, early ? Cell.RELAY_EARLY:Cell.RELAY, encrypt(relcell));
 	}
@@ -303,9 +310,20 @@ public class TorCircuit {
 	 * 
 	 * @return Successfully handled
 	 */
+    public int receiveWindow = 1000;
+    public int sendWindow = 1000;
+
+
 	public boolean handleCell(Cell c) throws IOException {
 		boolean handled = false;
-		
+        if(state == STATES.READY)
+            receiveWindow--;
+
+        if(receiveWindow < 900) {
+            send(new byte[] {00}, RELAY_SENDME, false, (short)0);
+            receiveWindow += 100;
+        }
+
 		if(state == STATES.DESTROYED)
 			throw new RuntimeException("Trying to use destroyed circuit");
 		
@@ -351,7 +369,12 @@ public class TorCircuit {
 					if(stream != null) 
 						stream.notifyConnect();
 					break;
-				case RELAY_DATA:
+                case RELAY_SENDME:
+                    if(streamid == 0)
+                        sendWindow += 100;
+                    System.out.println("RELAY_SENDME circ "+circId+" Stream "+streamid+ " cur window "+sendWindow);
+                    break;
+                case RELAY_DATA:
 					if(stream != null) 
 						stream._putRecved(data);
 					break;
@@ -368,8 +391,11 @@ public class TorCircuit {
 		}
 		else if (c.cmdId == Cell.DESTROY) {
 			System.out.println("Circuit destroyed "+circId);
-			for(TorStream s : streams.values())
-				s.notifyDisconnect();
+            System.out.println("Reason: "+Hex.toHexString(c.payload));
+            for (Iterator<TorStream> iterator = streams.values().iterator(); iterator.hasNext(); ) {
+                TorStream s = iterator.next();
+                s.notifyDisconnect();
+            }
 			setState(STATES.DESTROYED);
 			handled = true;
 		}

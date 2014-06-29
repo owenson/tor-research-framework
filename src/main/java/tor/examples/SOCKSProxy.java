@@ -5,13 +5,15 @@ import tor.TorCircuit;
 import tor.TorSocket;
 import tor.TorStream;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.*;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.Set;
 
@@ -19,187 +21,228 @@ import java.util.Set;
  * Created by gho on 27/06/14.
  */
 public class SOCKSProxy {
-    public static void handleRequest(final SocketChannel s, TorCircuit circ) throws IOException {
-        try {
-            System.out.println("new request");
+    // socks client class
+    class SocksClient implements TorStream.TorStreamListener{
+        SocketChannel client;
+        boolean connected;
+        long lastData = 0;
+        TorStream stream;
+        TorCircuit circ;
+        InetAddress remoteAddr;
+        int port;
 
-            final DataInputStream in = new DataInputStream(Channels.newInputStream(s));
-            final DataOutputStream out = new DataOutputStream(Channels.newOutputStream(s));
+        SocksClient(SocketChannel c, TorCircuit circ) throws IOException {
+            client = c;
+            client.configureBlocking(false);
+            lastData = System.currentTimeMillis();
+            this.circ = circ;
+        }
 
-            // read socks header
-            int ver = in.readByte();
-            if (ver != 4) {
-                System.out.println("incorrect version " + ver);
-                s.close();
-                return;
-            }
-            int cmd = in.readByte();
+        public void newClientData(Selector selector, SelectionKey sk) throws IOException {
+            if(!connected) {
+                ByteBuffer inbuf = ByteBuffer.allocate(512);
+                if(client.read(inbuf)<1)
+                    return;
+                inbuf.flip();
+                //inbufinbufinbufinb.get() final DataInputStream in = new DataInputStream(Channels.newInputStream(client));
+//                final DataOutputStream out = new DataOutputStream(Channels.newOutputStream(client));
 
-            // check supported command
-            if (cmd != 1) {
-                s.close();
-                return;
-            }
-
-            final int port = in.readShort();
-
-            final byte ip[] = new byte[4];
-            // fetch IP
-            in.read(ip);
-
-            InetAddress _remote = InetAddress.getByAddress(ip);
-
-            while ((in.readByte()) != 0) ; // username
-
-            // hostname provided, not IP
-            if (ip[0] == 0 && ip[1] == 0 && ip[2] == 0 && ip[3] != 0) { // host provided
-                String host = "";
-                byte b;
-                while ((b = in.readByte()) != 0) {
-                    host += b;
+                // read socks header
+                int ver = inbuf.get();
+                if (ver != 4) {
+                    throw new IOException("incorrect version" + ver);
                 }
-                _remote = InetAddress.getByName(host);
-                System.out.println(host + _remote);
-            }
-            final InetAddress remote = _remote;
+                int cmd = inbuf.get();
 
-            // connect to remote host
-            SocketChannel rms = SocketChannel.open(new InetSocketAddress(remote, port));
-            circ.createStream(remote.getHostAddress(), port, new TorStream.TorStreamListener() {
+                // check supported command
+                if (cmd != 1) {
+                    throw new IOException("incorrect version");
+                }
 
-                @Override
-                public void dataArrived(TorStream stream) {
-                    System.out.println("data arrived");
-                    try {
-                        byte b[] = stream.recv(-1, true);
-                        s.write(ByteBuffer.wrap(b));
-                    } catch (IOException e) {
-                        e.printStackTrace();
+                port = inbuf.getShort();
+
+                final byte ip[] = new byte[4];
+                // fetch IP
+                inbuf.get(ip);
+
+                remoteAddr = InetAddress.getByAddress(ip);
+
+                while ((inbuf.get()) != 0) ; // username
+
+                // hostname provided, not IP
+                if (ip[0] == 0 && ip[1] == 0 && ip[2] == 0 && ip[3] != 0) { // host provided
+                    String host = "";
+                    byte b;
+                    while ((b = inbuf.get()) != 0) {
+                        host += b;
                     }
+                    remoteAddr = InetAddress.getByName(host);
+                    System.out.println(host + remoteAddr);
                 }
 
-                @Override
-                public void connected(final TorStream stream) {
-                    System.out.println("connected");
-                    try {
-                        // write socks header response
-                        out.writeByte(0);
-                        out.writeByte(0x5a);
-                        out.writeShort(port);
-                        out.write(remote.getAddress());
+                stream = circ.createStream(remoteAddr.getHostAddress(), port, this);
+            } else {
+                ByteBuffer buf = ByteBuffer.allocate(1024);
+                if(client.read(buf) == -1)
+                    throw new IOException("disconnected");
+                lastData = System.currentTimeMillis();
+                buf.flip();
+                stream.send(buf.array());
+            }
+        }
 
-                        // begin proxying
-                        final Selector selector = Selector.open();
-                        s.configureBlocking(false);
-                        s.register(selector, SelectionKey.OP_READ);
-
-//            OutputStream rout = Channels.newOutputStream(rms);
-//            InputStream rin = Channels.newInputStream(rms);
-
-                        new Thread(new Runnable() {
-                            @Override
-                            public void run() {
-                                try {
-                                    while (true) {
-                                        selector.select(1000);
-                                        Set keys = selector.selectedKeys();
-                                        Iterator it = keys.iterator();
-                                        while (it.hasNext()) {
-                                            SelectionKey k = (SelectionKey) it.next();
-//                    it.remove();
-                                            ByteBuffer buf = ByteBuffer.allocate(1024);
-                                            if (k.isReadable() && k.channel() == s) {
-                                                if (s.read(buf) == -1)
-                                                    return;
-                                                buf.flip();
-                                                stream.send(buf.array());
-                                            }
-                                        }
-                                    }
-                                } catch(IOException e) {
-
-                                }
-                            }
-                        }).start();
-                    } catch (IOException e) {
-                        try {
-                            stream.destroy();
-                        } catch (IOException e1) {
-                            e1.printStackTrace();
-                        }
-                    }
-
+        @Override
+        public void dataArrived(TorStream s) {
+            try {
+                client.write(ByteBuffer.wrap(s.recv(-1, false)));
+            } catch (IOException e) {
+                try {
+                    removeClient(this);
+                } catch (IOException e1) {
+                    e1.printStackTrace();
                 }
+                e.printStackTrace();
+            }
 
-                @Override
-                public void disconnected(TorStream stream) {
-                    System.out.println("disconnected");
-                    try {
-                        // write socks header response
-                        out.writeByte(0);
-                        out.writeByte(0x5b);
-                        out.writeShort(port);
-                        out.write(remote.getAddress());
-                        s.close();
-                    } catch (IOException e) {
-                        System.out.println(e);
-                    }
+        }
 
+        @Override
+        public void connected(TorStream s) {
+            ByteBuffer out = ByteBuffer.allocate(20);
+            out.put((byte)0);
+            out.put((byte) (0x5a));
+            out.putShort((short) port);
+            out.put(remoteAddr.getAddress());
+            out.flip();
+            try {
+                client.write(out);
+            } catch (IOException e) {
+                try {
+                    removeClient(this);
+                } catch (IOException e1) {
+                    e1.printStackTrace();
                 }
+                System.out.println(e);
+            }
 
-                @Override
-                public void failure(TorStream s) {
-                    disconnected(s);
+            connected = true;
+        }
 
-                }
-            });
+        @Override
+        public void disconnected(TorStream s) {
+            try {
+                removeClient(this);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
 
+        }
 
-//            // write socks header response
-//            out.writeByte(0);
-//            out.writeByte(rms.isConnected() ? 0x5a:0x5b);
-//            out.writeShort(port);
-//            out.write(remote.getAddress());
-//
-//            if(!rms.isConnected()) {
-//                s.close();
-//                System.out.println("Cant connect to remote host");
-//                return;
-//            }
+        @Override
+        public void failure(TorStream s) {
+            disconnected(s);
+            try {
+                removeClient(this);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
 
-
-            //s.close();
-        } catch(IOException e) {
-            System.out.println(e);
         }
     }
-    public static void main(String[] args) throws IOException {
-        OnionRouter guard = TorSocket.getConsensus().getRouterByName("tor26");
-		final TorSocket sock = new TorSocket(guard);
 
-		// connected---------------
-		final TorCircuit circ = sock.createCircuit();
-		circ.createRoute("gho,edwardsnowden1");
+    static ArrayList <SocksClient> clients = new ArrayList<SocksClient>();
+
+    // utility function
+    public SocksClient addClient(SocketChannel s, TorCircuit circ) {
+        SocksClient cl;
+        try {
+            cl = new SocksClient(s, circ);
+        } catch (IOException e) {
+            e.printStackTrace();
+            return null;
+        }
+        clients.add(cl);
+        return cl;
+    }
+
+    public void removeClient(SocksClient c) throws IOException {
+        c.client.close();
+        c.stream.destroy();
+        clients.remove(c);
+    }
+
+    public SOCKSProxy() throws IOException {
+        OnionRouter guard = TorSocket.getConsensus().getRouterByName("southsea0");
+        TorSocket sock = new TorSocket(guard);
+
+        // connected---------------
+        TorCircuit circ = sock.createCircuit();
+        circ.createRoute("gho,IPredator");
         circ.waitForState(TorCircuit.STATES.READY);
 
-		System.out.println("READY!!");
+        System.out.println("READY!!");
 
-        final ServerSocketChannel socks = ServerSocketChannel.open();
+        ServerSocketChannel socks = ServerSocketChannel.open();
         socks.socket().bind(new InetSocketAddress(8000));
+        socks.configureBlocking(false);
+        Selector select = Selector.open();
+        socks.register(select, SelectionKey.OP_ACCEPT);
+
+        int lastClients = clients.size();
+        // select loop
         while(true) {
-            final SocketChannel s = socks.accept();
-            new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    try {
-                        handleRequest(s, circ);
-                    } catch (IOException e) {
-                        e.printStackTrace();
+            select.select(1000);
+
+            Set keys = select.selectedKeys();
+            Iterator iterator = keys.iterator();
+            while (iterator.hasNext()) {
+                SelectionKey k = (SelectionKey) iterator.next();
+
+                if (!k.isValid())
+                    continue;
+
+                // new connection?
+                if (k.isAcceptable() && k.channel() == socks) {
+                    // server socket
+                    SocketChannel csock = socks.accept();
+                    if (csock == null)
+                        continue;
+                    addClient(csock, circ);
+                    csock.register(select, SelectionKey.OP_READ);
+                } else if (k.isReadable()) {
+                    // new data on a client/remote socket
+                    for (int i = 0; i < clients.size(); i++) {
+                        SocksClient cl = clients.get(i);
+                        try {
+                            if (k.channel() == cl.client) // from client (e.g. socks client)
+                                cl.newClientData(select, k);
+                        } catch (IOException e) { // error occurred - remove client
+                            cl.client.close();
+                            k.cancel();
+                            clients.remove(cl);
+                        }
+
                     }
-
                 }
-            }).start();
-        }
+            }
 
+            // client timeout check
+            for (int i = 0; i < clients.size(); i++) {
+                SocksClient cl = clients.get(i);
+                if((System.currentTimeMillis() - cl.lastData) > 30000L) {
+                    cl.stream.destroy();
+                    cl.client.close();
+                    clients.remove(cl);
+                }
+            }
+            if(clients.size() != lastClients) {
+                System.out.println(clients.size());
+                lastClients = clients.size();
+            }
+        }
+    }
+
+    public static void main(String[] args) throws IOException {
+        new SOCKSProxy();
     }
 }

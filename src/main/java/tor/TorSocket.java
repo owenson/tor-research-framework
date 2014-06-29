@@ -76,6 +76,18 @@ public class TorSocket {
                 }
         }
 	}
+
+    private byte[] blockingRead(int length) throws IOException {
+       byte buf[] = new byte[length];
+       int off = 0;
+       while(length>off) {
+           int rlen = in.read(buf, off, length-off);
+           if(rlen == -1)
+               throw new IOException("failed read");
+           off+=rlen;
+       }
+       return buf;
+    }
 	
 	/**
 	 * Receive a cell from the socket and decode it into a Cell object
@@ -83,8 +95,8 @@ public class TorSocket {
 	 * @return Cell object
 	 */
 	public Cell recvCell() throws IOException {
-		byte hdr[] = new byte[3];
-		in.read(hdr, 0, 3);
+		byte hdr[] =  blockingRead(3);
+
 		ByteBuffer buf = ByteBuffer.wrap(hdr);
 		buf.order(ByteOrder.BIG_ENDIAN);
 		int circid = buf.getShort();
@@ -92,14 +104,11 @@ public class TorSocket {
 		int pllength = 509;
 			
 		if(cmdId == 7 || cmdId >= 128) {
-			byte lenbuf[] = new byte[2];
-			in.read(lenbuf, 0, 2);
-			pllength = ByteBuffer.wrap(lenbuf).getShort();
+			pllength = ByteBuffer.wrap(blockingRead(2)).getShort();
 		}
 		
-		byte payload[] = new byte[pllength];
-		in.read(payload, 0, pllength);
-		
+		byte payload[] = blockingRead(pllength);
+
 		return new Cell(circid, cmdId, payload);
 	}
 
@@ -128,8 +137,6 @@ public class TorSocket {
     }
 	/**
 	 * Main loop.  Handles incoming cells and sends any data waiting to be send down circuits/streams
-	 * 
-	 * WARNING: currently blocks on read so sends only done on cell recv - FIXME
 	 */
 	public void receiveHandlerLoop() {
         while(true) {
