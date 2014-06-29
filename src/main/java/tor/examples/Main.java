@@ -20,8 +20,7 @@ public class Main {
 		// connected---------------
 		TorCircuit circ = sock.createCircuit();
 		circ.createRoute("gho,edwardsnowden1");
-		while(circ.state != circ.STATE_READY)
-			sock.handleLoop();
+        circ.waitForState(TorCircuit.STATES.READY);
 
 		System.out.println("READY!!");
 		
@@ -41,9 +40,13 @@ public class Main {
 			
 			@Override
 			public void dataArrived(TorStream s) {
-				System.out.println("data: "+new String(s.recv(-1)));
-				
-			}
+                try {
+                    System.out.println("data: "+new String(s.recv(-1,true)));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+
+            }
 			
 			@Override
 			public void connected(TorStream s) {
@@ -52,14 +55,13 @@ public class Main {
 				} catch (UnsupportedEncodingException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
-				}
-				System.out.println("connected");
+				} catch (IOException e) {
+                    e.printStackTrace();
+                }
+                System.out.println("connected");
 				
 			}
 		});
-		
-		while(true)
-			sock.handleLoop();
 	}
 
 }

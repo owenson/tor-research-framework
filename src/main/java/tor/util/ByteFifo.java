@@ -18,7 +18,11 @@ public class ByteFifo {
 	public ByteFifo(int capacity) {
 		buffer = new byte[capacity];
 	}
-	
+
+    public boolean isEmpty() {
+        return in == out;
+    }
+
 	public void put(byte []toput) {
 		for (byte b : toput) {
 			buffer[in] = b;

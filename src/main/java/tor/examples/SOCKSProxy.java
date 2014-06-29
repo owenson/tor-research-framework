@@ -70,8 +70,8 @@ public class SOCKSProxy {
                 @Override
                 public void dataArrived(TorStream stream) {
                     System.out.println("data arrived");
-                    byte b[] = stream.recv(-1);
                     try {
+                        byte b[] = stream.recv(-1, true);
                         s.write(ByteBuffer.wrap(b));
                     } catch (IOException e) {
                         e.printStackTrace();
@@ -180,22 +180,9 @@ public class SOCKSProxy {
 		// connected---------------
 		final TorCircuit circ = sock.createCircuit();
 		circ.createRoute("gho,edwardsnowden1");
-		while(circ.state != circ.STATE_READY)
-			sock.handleLoop();
+        circ.waitForState(TorCircuit.STATES.READY);
 
 		System.out.println("READY!!");
-
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                while(true)
-                    try {
-                        sock.handleLoop();
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-            }
-        }).start();
 
         final ServerSocketChannel socks = ServerSocketChannel.open();
         socks.socket().bind(new InetSocketAddress(8000));

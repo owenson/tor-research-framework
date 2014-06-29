@@ -17,6 +17,7 @@ import java.security.Security;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.TreeMap;
+import java.util.concurrent.LinkedBlockingQueue;
 
 public class TorSocket {
 
@@ -30,7 +31,12 @@ public class TorSocket {
 	
 	// circuits for this socket
 	TreeMap<Integer, TorCircuit> circuits = new TreeMap<Integer, TorCircuit>();
-	
+    LinkedBlockingQueue<Cell> sendQueue = new LinkedBlockingQueue<Cell>();
+    enum STATES { INITIALISING, READY };
+
+    private STATES state = STATES.INITIALISING;
+    private Object stateNotify = new Object();
+
 	/**
 	 * Send a cell given payload
 	 * 
@@ -40,27 +46,35 @@ public class TorSocket {
 	 * 
 	 * @return Success or failure
 	 */
-	public boolean sendCell(int circid, int cmd, byte[] payload)
+	public void sendCell(int circid, int cmd, byte[] payload)
 			throws IOException {
-		byte cell[];
-		
-		if (cmd == 7 || cmd >= 128) 
-			cell = new byte[3 + 2 + payload.length];
-		else
-			cell = new byte[512];
-		
-		ByteBuffer buf = ByteBuffer.wrap(cell);
-		buf.order(ByteOrder.BIG_ENDIAN);
-		buf.putShort((short) circid);
-		buf.put((byte) cmd);
+        try {
+            sendQueue.put(new Cell(circid, cmd, payload));
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
 
-		if (cmd == 7 || cmd >= 128) 
-			buf.putShort((short) payload.length);
+    public void sendCell(Cell c)
+            throws IOException {
+        try {
+            sendQueue.put(c);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
 
-		buf.put(payload);
-		//System.out.println("Sending:" + byteArrayToHex(cell));
-		out.write(cell);
-		return true;
+    public void processSendQueue() {
+        while(true) {
+            while (!sendQueue.isEmpty())
+                try {
+                    out.write(sendQueue.take().getBytes());
+                } catch (IOException e) {
+                    e.printStackTrace();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+        }
 	}
 	
 	/**
@@ -105,22 +119,40 @@ public class TorSocket {
 		buf.put(local);
 		sendCell(0, Cell.NETINFO, nibuf);
 	}
-	
+
+    public void setState(STATES newState) {
+        synchronized (stateNotify) {
+            this.state = newState;
+            this.stateNotify.notify();
+        }
+    }
 	/**
 	 * Main loop.  Handles incoming cells and sends any data waiting to be send down circuits/streams
 	 * 
 	 * WARNING: currently blocks on read so sends only done on cell recv - FIXME
 	 */
-	public void handleLoop() throws IOException {
-		// receive a cell
-		Cell c=recvCell();
-		TorCircuit circ = circuits.get(new Integer(c.circId));
-		if(circ == null || !circ.handleCell(c))
-			System.out.println("unhandled cell "+c);
-		
-		// send any stream data
-		for (TorCircuit cr : circuits.values())
-			cr.handleToSends();
+	public void receiveHandlerLoop() {
+        while(true) {
+            // receive a cell
+            Cell c= null;
+            try {
+                c = recvCell();
+
+                switch(c.cmdId) {
+                    case Cell.NETINFO:
+                        sendNetInfo();
+                        setState(STATES.READY);
+                        break;
+                }
+                TorCircuit circ = circuits.get(new Integer(c.circId));
+                if(circ == null || !circ.handleCell(c))
+                    System.out.println("unhandled cell "+c);
+
+            } catch (IOException e) {
+                e.printStackTrace();
+                return;
+            }
+        }
 	}
 	
 	/**
@@ -199,15 +231,31 @@ public class TorSocket {
 		out = sslsocket.getOutputStream();
 		in = sslsocket.getInputStream();
 
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                processSendQueue();
+            }
+        }).start();
+
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                receiveHandlerLoop();
+            }
+        }).start();
+
 		// versions cell
 		sendCell(0, Cell.VERSIONS, new byte[] { 00, 03 });
-		
-		// wait for netinfo
-		Cell c = null;
-		while(c==null || c.cmdId != 8)
-			System.out.println((c=recvCell()));
-		
-		// netinfo cell
-		sendNetInfo();
+
+        while(state != STATES.READY) {
+            synchronized (stateNotify) {
+                try {
+                    stateNotify.wait();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
 	}
 }

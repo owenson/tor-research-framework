@@ -2,6 +2,9 @@ package tor;
 
 import org.apache.commons.codec.binary.Hex;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+
 public class Cell {
 	public int circId;
 	public int cmdId;
@@ -30,4 +33,41 @@ public class Cell {
 		return "Cell [circId=" + circId + ", cmdId=" + cmdId + ", payload="
 				+ Hex.encodeHexString(payload) + "]";
 	}
+
+    // prepare for sending
+    public byte [] getBytes() {
+        byte cell[];
+
+        if (cmdId == 7 || cmdId >= 128)
+            cell = new byte[3 + 2 + payload.length];
+        else
+            cell = new byte[512];
+
+        ByteBuffer buf = ByteBuffer.wrap(cell);
+        buf.order(ByteOrder.BIG_ENDIAN);
+        buf.putShort((short) circId);
+        buf.put((byte) cmdId);
+
+        if (cmdId == 7 || cmdId >= 128)
+            buf.putShort((short) payload.length);
+
+        buf.put(payload);
+        //System.out.println("Sending:" + byteArrayToHex(cell));
+        return cell;
+    }
+
+    public static Cell fromBytes(byte []in) {
+        ByteBuffer buf = ByteBuffer.wrap(in);
+        int circid = buf.getShort();
+        int cmdId = buf.get() & 0xff;
+        int pllength = 509;
+
+        if(cmdId == 7 || cmdId >= 128)
+            pllength = buf.getShort();
+
+        byte payload[] = new byte[pllength];
+        buf.get(payload);
+
+        return new Cell(circid, cmdId, payload);
+    }
 }

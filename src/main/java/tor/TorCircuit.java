@@ -41,13 +41,9 @@ public class TorCircuit {
 	private LinkedList<OnionRouter> circuitToBuild = new LinkedList<OnionRouter>();
 	private ArrayList<TorHop> hops = new ArrayList<TorHop>();
 	
-	public static final int STATE_NONE = 0;
-	public static final int STATE_CREATING = 0;
-	public static final int STATE_EXTENDING = 1;
-	public static final int STATE_READY = 2;
-	public static final int STATE_DESTROYED = 3;
-	
-	public int state = STATE_NONE;
+    public enum STATES { NONE, CREATING, EXTENDING, READY, DESTROYED }
+	public STATES state = STATES.NONE;
+    private Object stateNotify = new Object();
 	
 	// list of active streams for this circuit
 	TreeMap<Integer, TorStream> streams = new TreeMap<Integer, TorStream>();
@@ -56,7 +52,7 @@ public class TorCircuit {
 	 * 
 	 */
 	UniqueQueue <TorStream> streamsSending = new UniqueQueue<TorStream>();
-	
+
 	TorSocket sock;
 	
 	public TorCircuit(TorSocket sock) {
@@ -68,6 +64,27 @@ public class TorCircuit {
 		circId = cid;
 		this.sock = sock;
 	}
+
+    public void setState(STATES newState) {
+        synchronized (stateNotify) {
+            state = newState;
+            stateNotify.notifyAll();
+        }
+    }
+
+    public void waitForState(STATES desired) {
+        while(true) {
+            synchronized (stateNotify) {
+                try {
+                    stateNotify.wait();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+            if(state.equals(desired))
+                return;
+        }
+    }
 	
 	/**
 	 * Utility function to create routes
@@ -76,7 +93,7 @@ public class TorCircuit {
 	 * @throws IOException 
 	 */
 	public void createRoute(String hopList) throws IOException {
-		if(state == STATE_DESTROYED)
+		if(state == STATES.DESTROYED)
 			throw new RuntimeException("Trying to use destroyed circuit");
 		
 		String hops[] = hopList.split(",");
@@ -92,10 +109,10 @@ public class TorCircuit {
 	 * @param r Hop
 	 */
 	public void create(OnionRouter r) throws IOException  {
-		if(state == STATE_DESTROYED)
+		if(state == STATES.DESTROYED)
 			throw new RuntimeException("Trying to use destroyed circuit");
 		
-		state = STATE_CREATING;
+		setState(STATES.CREATING);
 		sock.sendCell(circId, Cell.CREATE, createPayload(r));
 	}
 	
@@ -193,7 +210,7 @@ public class TorCircuit {
 	 * @throws  
 	 */
 	public void extend(OnionRouter nextHop) throws IOException  {
-		if(state == STATE_DESTROYED)
+		if(state == STATES.DESTROYED)
 			throw new RuntimeException("Trying to use destroyed circuit");
 		
 		TorHop lastHop = getLastHop();
@@ -210,7 +227,7 @@ public class TorCircuit {
 		//byte []payload = encrypt(buildRelay(lastHop, RELAY_EXTEND, (short)0, extend));
 		//sock.sendCell(circId, Cell.RELAY_EARLY, payload);
 		
-		state = STATE_EXTENDING;
+		setState(STATES.EXTENDING);
 	}
 	
 	/**
@@ -233,7 +250,9 @@ public class TorCircuit {
 		
 		// ad hop
 		hops.add(new TorHop(kdf, kh, temp_r));
-		state = STATE_READY;
+
+        if(circuitToBuild.isEmpty())
+            setState(STATES.READY);
 	}
 	
 	/**
@@ -246,7 +265,7 @@ public class TorCircuit {
 	 * @return TorStream object
 	 */
 	public TorStream createStream(String host, int port, TorStream.TorStreamListener list) throws IOException {
-		if(state == STATE_DESTROYED)
+		if(state == STATES.DESTROYED)
 			throw new RuntimeException("Trying to use destroyed circuit");
 		
 		byte b[] = new byte[100];
@@ -270,25 +289,11 @@ public class TorCircuit {
 	 * @param stream Stream ID
 	 */
 	public void send(byte []payload, int relaytype, boolean early, short stream) throws IOException {
-		if(state == STATE_DESTROYED)
+		if(state == STATES.DESTROYED)
 			throw new RuntimeException("Trying to use destroyed circuit");
 		
 		byte relcell[] = buildRelay(hops.get(hops.size() - 1), relaytype, stream, payload);
 		sock.sendCell(circId, early ? Cell.RELAY_EARLY:Cell.RELAY, encrypt(relcell));
-	}
-	
-	/**
-	 * Loops through streams finding ones that have data to send and sends their data for them
-	 */
-	public void handleToSends() throws IOException {
-		while(!streamsSending.isEmpty()) {
-			TorStream s = streamsSending.remove();
-			byte data [] = s._getToSend(509-1-2-2-4-2);
-			do {
-				send(data, RELAY_DATA, false, (short) s.streamId);
-				data = s._getToSend(509-1-2-2-4-2);
-			} while(data.length > 0);
-		}
 	}
 	
 	/**
@@ -301,7 +306,7 @@ public class TorCircuit {
 	public boolean handleCell(Cell c) throws IOException {
 		boolean handled = false;
 		
-		if(state == STATE_DESTROYED)
+		if(state == STATES.DESTROYED)
 			throw new RuntimeException("Trying to use destroyed circuit");
 		
 		if(c.cmdId == Cell.CREATED) // create
@@ -335,11 +340,12 @@ public class TorCircuit {
 			
 			switch(cmd) {
 				case RELAY_EXTENDED: // extended
-					handleCreated(data);					
-					state = STATE_READY;
-					
+					handleCreated(data);
+
 					if(!circuitToBuild.isEmpty()) // needs extending further?
 						extend(circuitToBuild.removeFirst());
+                    else
+                        setState(STATES.READY);
 					break;
 				case RELAY_CONNECTED:
 					if(stream != null) 
@@ -364,7 +370,7 @@ public class TorCircuit {
 			System.out.println("Circuit destroyed "+circId);
 			for(TorStream s : streams.values())
 				s.notifyDisconnect();
-			state = STATE_DESTROYED;
+			setState(STATES.DESTROYED);
 			handled = true;
 		}
 		
