@@ -87,6 +87,8 @@ public class TorStream {
 	}
 
     public void destroy() throws IOException {
+        if(state == STATES.DESTROYED)
+            return; // don't redo!
         setState(STATES.DESTROYED);
         circ.send(new byte[] {6}, TorCircuit.RELAY_END, false, (short)streamId);
         circ.streams.remove(new Integer(streamId));

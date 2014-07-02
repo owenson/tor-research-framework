@@ -148,7 +148,7 @@ public class TorCircuit {
 	 * @param payload Relay cell data
 	 * @return Constructed relay payload
 	 */
-	protected byte[] buildRelay(TorHop toHop, int cmd, short stream, byte[] payload) {
+	protected synchronized byte[] buildRelay(TorHop toHop, int cmd, short stream, byte[] payload) {
 		byte [] fnl = new byte[509];
 		ByteBuffer buf = ByteBuffer.wrap(fnl);
 		buf.put((byte)cmd);
@@ -198,7 +198,10 @@ public class TorCircuit {
 		for (int i = 0; i<hops.size(); i++) {
 			data = hops.get(i).decrypt(data);
             if(data[1] == 0 && data[2] == 0) // recognised
-                return data; // TODO- also check hash!!
+                if(i!=hops.size()-1) {
+                    System.out.println("cell received from INTERMEDIATE HOP " + hops.get(i));
+                    return data; // TODO- also check hash!!
+                }
 		}
 		return data;
 	}
@@ -292,7 +295,10 @@ public class TorCircuit {
 	 * @param early Whether to use an early cell (needed for EXTEND only)
 	 * @param stream Stream ID
 	 */
-	public void send(byte []payload, int relaytype, boolean early, short stream) throws IOException {
+    long sentPackets = 0;
+    long sentBytes = 0;
+    // must be synchronised due to hash calculation - out of sync = bad
+	public synchronized void send(byte []payload, int relaytype, boolean early, short stream) throws IOException {
 		if(state == STATES.DESTROYED)
 			throw new RuntimeException("Trying to use destroyed circuit");
 
@@ -301,7 +307,9 @@ public class TorCircuit {
 
 		byte relcell[] = buildRelay(hops.get(hops.size() - 1), relaytype, stream, payload);
 		sock.sendCell(circId, early ? Cell.RELAY_EARLY:Cell.RELAY, encrypt(relcell));
-	}
+        sentPackets ++;
+        sentBytes += relcell.length;
+    }
 	
 	/**
 	 * Handles cell for this circuit
@@ -316,8 +324,6 @@ public class TorCircuit {
 
 	public boolean handleCell(Cell c) throws IOException {
 		boolean handled = false;
-        if(state == STATES.READY)
-            receiveWindow--;
 
         if(receiveWindow < 900) {
             send(new byte[] {00}, RELAY_SENDME, false, (short)0);
@@ -375,7 +381,9 @@ public class TorCircuit {
                     System.out.println("RELAY_SENDME circ "+circId+" Stream "+streamid+ " cur window "+sendWindow);
                     break;
                 case RELAY_DATA:
-					if(stream != null) 
+                    if(state == STATES.READY)
+                        receiveWindow--;
+					if(stream != null)
 						stream._putRecved(data);
 					break;
 				case RELAY_END:

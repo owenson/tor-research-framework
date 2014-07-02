@@ -60,7 +60,14 @@ public class TorHop {
 		System.out.println("Hop added " + router);
 	}
 
-	protected byte[] encrypt(byte[] in) {
+    @Override
+    public String toString() {
+        return "TorHop{" +
+                "router=" + router +
+                '}';
+    }
+
+    protected byte[] encrypt(byte[] in) {
 		return encf.update(in);
 	}
 	

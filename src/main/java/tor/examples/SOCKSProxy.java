@@ -1,9 +1,7 @@
 package tor.examples;
 
-import tor.OnionRouter;
-import tor.TorCircuit;
-import tor.TorSocket;
-import tor.TorStream;
+import org.bouncycastle.util.encoders.Base64;
+import tor.*;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -13,6 +11,7 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.security.PublicKey;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.Set;
@@ -82,18 +81,24 @@ public class SOCKSProxy {
 
                 stream = circ.createStream(remoteAddr.getHostAddress(), port, this);
             } else {
-                ByteBuffer buf = ByteBuffer.allocate(1024);
-                if(client.read(buf) == -1)
+                ByteBuffer buf = ByteBuffer.allocate(4096);
+                int nlen = 0;
+                if((nlen = client.read(buf)) == -1)
                     throw new IOException("disconnected");
                 lastData = System.currentTimeMillis();
                 buf.flip();
-                stream.send(buf.array());
+                byte b[] = new byte[nlen];
+                buf.get(b);
+                stream.send(b);
             }
         }
 
         @Override
         public void dataArrived(TorStream s) {
             try {
+                if(!client.isConnected())
+                    removeClient(this);
+
                 client.write(ByteBuffer.wrap(s.recv(-1, false)));
             } catch (IOException e) {
                 try {
@@ -172,18 +177,28 @@ public class SOCKSProxy {
     }
 
     public SOCKSProxy() throws IOException {
+        OnionRouter local = new OnionRouter("nas", "5C493EC1D035322D6575A84F040687EC5D2FA241", "192.168.0.8", 8001, 0) {
+            @Override
+            public PublicKey getPubKey() throws IOException {
+                return TorCrypto.asn1GetPublicKey(Base64.decode("MIGJAoGBAMTF1X28OmCN+gt7fwRiL9fI/hd3nKdAN/sBXOrDAB/A9CW/Dd2avqeX\n" +
+                        "ZKarmW3HbVZAdTGECu39p9h6lf5NHbLR2ZSDghcP5qb9m4ZsNg+PeLwu7M5cYRnR\n" +
+                        "GTHIh8ybRpGGtoCoL+mVF8MCNSfELCXQ9S3YTzqN/IzyrM3+lt0HAgMBAAE="));
+            }
+        };
+
         OnionRouter guard = TorSocket.getConsensus().getRouterByName("southsea0");
         TorSocket sock = new TorSocket(guard);
 
         // connected---------------
         TorCircuit circ = sock.createCircuit();
         circ.createRoute("gho,IPredator");
+        //circ.create(local);
         circ.waitForState(TorCircuit.STATES.READY);
 
         System.out.println("READY!!");
 
         ServerSocketChannel socks = ServerSocketChannel.open();
-        socks.socket().bind(new InetSocketAddress(8000));
+        socks.socket().bind(new InetSocketAddress(9050));
         socks.configureBlocking(false);
         Selector select = Selector.open();
         socks.register(select, SelectionKey.OP_ACCEPT);

@@ -180,9 +180,9 @@ public class TorSocket {
 		return consensus;
 	}
 	
-	public TorSocket(OnionRouter guard) throws IOException  {
+	/*public TorSocket(OnionRouter guard) throws IOException  {
 		this(guard.ip.getHostAddress(), guard.orport);
-	}
+	}*/
 	
 	/**
 	 * Main constructor. Connects and does connection setup.
@@ -190,10 +190,11 @@ public class TorSocket {
 	 * @param host Hostname/IP string
 	 * @param port Port
 	 */
-	public TorSocket(String host, int port) throws IOException  {
+	public TorSocket(OnionRouter fh) throws IOException  {
 
 		if(consensus == null) consensus = new Consensus();
-		firstHop = consensus.getRouterByIpPort(host, port);
+		//firstHop = consensus.getRouterByIpPort(host, port);
+        firstHop = fh;
 		if(firstHop == null)
 			throw new RuntimeException("Couldn't find router ip in consensus");
 		
@@ -233,7 +234,7 @@ public class TorSocket {
 		}
 
 		// connect
-		sslsocket = (SSLSocket) sc.getSocketFactory().createSocket(host, port); 
+		sslsocket = (SSLSocket) sc.getSocketFactory().createSocket(firstHop.ip, firstHop.orport);
 
 		out = sslsocket.getOutputStream();
 		in = sslsocket.getInputStream();
