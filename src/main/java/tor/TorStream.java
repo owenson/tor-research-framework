@@ -103,7 +103,8 @@ public class TorStream {
         recvWindow--;
         if(recvWindow < 450) {
             try {
-                circ.send(new byte[] {00}, TorCircuit.RELAY_SENDME, false, (short)streamId);
+                //System.out.println("sent SENDME (STREAM) "+recvWindow);
+                circ.send(null, TorCircuit.RELAY_SENDME, false, (short)streamId);
             } catch (IOException e) {
                 e.printStackTrace();
             }

@@ -12,7 +12,8 @@ import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.security.PublicKey;
-import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Set;
 
@@ -102,12 +103,14 @@ public class SOCKSProxy {
                 client.write(ByteBuffer.wrap(s.recv(-1, false)));
             } catch (IOException e) {
                 try {
+                    //System.out.println(e);
                     removeClient(this);
                 } catch (IOException e1) {
-                    e1.printStackTrace();
+                    //e1.printStackTrace();
                 }
-                e.printStackTrace();
+                //e.printStackTrace();
             }
+            lastData = System.currentTimeMillis();
 
         }
 
@@ -155,7 +158,7 @@ public class SOCKSProxy {
         }
     }
 
-    static ArrayList <SocksClient> clients = new ArrayList<SocksClient>();
+    static HashMap<SocketChannel,SocksClient> clients = new HashMap<SocketChannel,SocksClient>();
 
     // utility function
     public SocksClient addClient(SocketChannel s, TorCircuit circ) {
@@ -166,16 +169,17 @@ public class SOCKSProxy {
             e.printStackTrace();
             return null;
         }
-        clients.add(cl);
+        clients.put(s,cl);
         return cl;
     }
 
     public void removeClient(SocksClient c) throws IOException {
         c.client.close();
         c.stream.destroy();
-        clients.remove(c);
+        clients.remove(c.client);
     }
 
+    long lastTimeoutCheck = 0;
     public SOCKSProxy() throws IOException {
         OnionRouter local = new OnionRouter("nas", "5C493EC1D035322D6575A84F040687EC5D2FA241", "192.168.0.8", 8001, 0) {
             @Override
@@ -191,8 +195,8 @@ public class SOCKSProxy {
 
         // connected---------------
         TorCircuit circ = sock.createCircuit();
-        circ.createRoute("gho,IPredator");
-        //circ.create(local);
+        circ.createRoute("IPredator");
+        //circ.create(guard);
         circ.waitForState(TorCircuit.STATES.READY);
 
         System.out.println("READY!!");
@@ -226,33 +230,35 @@ public class SOCKSProxy {
                     csock.register(select, SelectionKey.OP_READ);
                 } else if (k.isReadable()) {
                     // new data on a client/remote socket
-                    for (int i = 0; i < clients.size(); i++) {
-                        SocksClient cl = clients.get(i);
-                        try {
-                            if (k.channel() == cl.client) // from client (e.g. socks client)
-                                cl.newClientData(select, k);
-                        } catch (IOException e) { // error occurred - remove client
-                            cl.client.close();
-                            k.cancel();
-                            clients.remove(cl);
-                        }
-
+                    SocksClient cl = clients.get(k.channel());
+                    try {
+                        cl.newClientData(select, k);
+                    } catch (IOException e) { // error occurred - remove client
+                        cl.client.close();
+                        k.cancel();
+                        clients.remove(cl);
+                        //System.out.println(e);
                     }
+
                 }
             }
 
             // client timeout check
-            for (int i = 0; i < clients.size(); i++) {
-                SocksClient cl = clients.get(i);
-                if((System.currentTimeMillis() - cl.lastData) > 30000L) {
-                    cl.stream.destroy();
-                    cl.client.close();
-                    clients.remove(cl);
+            if(System.currentTimeMillis() - lastTimeoutCheck > 15000) {
+                lastTimeoutCheck = System.currentTimeMillis();
+                Collection<SocksClient> clientsTmp = clients.values();
+                for(SocksClient cl : clientsTmp) {
+                    if((System.currentTimeMillis() - cl.lastData) > 30000L) {
+                        cl.stream.destroy();
+                        cl.client.close();
+                        clients.remove(cl);
+                    }
                 }
-            }
-            if(clients.size() != lastClients) {
-                System.out.println(clients.size());
-                lastClients = clients.size();
+                if(clients.size() != lastClients) {
+                    System.out.println(clients.size());
+                    lastClients = clients.size();
+                }
+
             }
         }
     }

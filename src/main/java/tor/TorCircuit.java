@@ -155,8 +155,13 @@ public class TorCircuit {
 		buf.putShort((short) 0); // recognised
 		buf.putShort(stream);
 		buf.putInt(0); // digest
-		buf.putShort((short) payload.length);
-		buf.put(payload);
+
+        if(payload != null) {
+            buf.putShort((short) payload.length);
+            buf.put(payload);
+        } else {
+            buf.putShort((short)0);
+        }
 		
 		toHop.df_md.update(fnl);
 		MessageDigest md;
@@ -194,14 +199,10 @@ public class TorCircuit {
 	 * @param data Encrypted data for onion skin removal.
 	 * @return Decrypted data.
 	 */
+    // TODO: should check digest in this function too - otherwise might miss packets with 1/65535 probability.
 	private byte[] decrypt(byte []data) {
 		for (int i = 0; i<hops.size(); i++) {
 			data = hops.get(i).decrypt(data);
-            if(data[1] == 0 && data[2] == 0) // recognised
-                if(i!=hops.size()-1) {
-                    System.out.println("cell received from INTERMEDIATE HOP " + hops.get(i));
-                    return data; // TODO- also check hash!!
-                }
 		}
 		return data;
 	}
@@ -280,6 +281,7 @@ public class TorCircuit {
 		buf.put((host+":"+port).getBytes("UTF-8"));
 		buf.put((byte)0); // null terminator
 		buf.putInt(0);
+        //TODO: allocate stream and circuit IDS properly
 		int stid = streamId_counter++;
 		send(b, RELAY_BEGIN, false, (short) stid);
 		TorStream st = new TorStream(stid, this, list);
@@ -318,15 +320,17 @@ public class TorCircuit {
 	 * 
 	 * @return Successfully handled
 	 */
-    public int receiveWindow = 1000;
-    public int sendWindow = 1000;
+    public long receiveWindow = 1000;
+    public long sendWindow = 1000;
 
 
 	public boolean handleCell(Cell c) throws IOException {
 		boolean handled = false;
 
+
         if(receiveWindow < 900) {
-            send(new byte[] {00}, RELAY_SENDME, false, (short)0);
+            //System.out.println("sent SENDME (CIRCUIT): " + receiveWindow);
+            send(null, RELAY_SENDME, false, (short)0);
             receiveWindow += 100;
         }
 
@@ -349,9 +353,10 @@ public class TorCircuit {
 			// decode relay header
 			ByteBuffer buf = ByteBuffer.wrap(c.payload);
 			int cmd = buf.get();
-			if(buf.getShort() != 0)
-				throw new RuntimeException("Invalid relay cell");
-			
+			if(buf.getShort() != 0) {
+                System.out.println("WARN: invalid relay cell");
+                return false;
+            }
 			int streamid = buf.getShort();
 			TorStream stream = streams.get(new Integer(streamid));
 			
