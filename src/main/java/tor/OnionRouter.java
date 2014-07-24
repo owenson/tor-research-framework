@@ -16,7 +16,7 @@ public class OnionRouter {
 	int orport;
 	int dirport;
 	PublicKey pubKey = null;
-	String identityhash;
+	public String identityhash;
 	
 	public OnionRouter(String _nm, String _ident, String _ip, int _orport, int _dirport) throws UnknownHostException {
 		name = _nm;

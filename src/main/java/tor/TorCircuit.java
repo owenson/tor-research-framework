@@ -31,6 +31,7 @@ public class TorCircuit {
 	public static final int RELAY_EXTEND = 6;
 	public static final int RELAY_EXTENDED = 7;
 	public static final int RELAY_EARLY = 9;
+    public static final int RELAY_DROP = 10;
 	public static final int RELAY_RESOLVE = 11;
 	public static final int RELAY_RESOLVED = 12;
 	public static final int RELAY_BEGIN_DIR = 13;
@@ -312,7 +313,10 @@ public class TorCircuit {
         sentPackets ++;
         sentBytes += relcell.length;
     }
-	
+
+    public void destroy() throws IOException {
+        sock.sendCell(circId, Cell.DESTROY, null);
+    }
 	/**
 	 * Handles cell for this circuit
 	 * 

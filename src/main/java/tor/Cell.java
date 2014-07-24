@@ -51,7 +51,8 @@ public class Cell {
         if (cmdId == 7 || cmdId >= 128)
             buf.putShort((short) payload.length);
 
-        buf.put(payload);
+        if(payload != null)
+            buf.put(payload);
         //System.out.println("Sending:" + byteArrayToHex(cell));
         return cell;
     }
