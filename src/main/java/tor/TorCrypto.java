@@ -58,7 +58,16 @@ public class TorCrypto {
 		System.arraycopy(in, 0, tmp, 1, in.length);
 		return new BigInteger(tmp);
 	}
-	
+
+    public static MessageDigest getSHA1() {
+        MessageDigest md;
+        try {
+            md = MessageDigest.getInstance("SHA-1");
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
+        }
+        return md;
+    }
 	/**
 	 * Tor Key derivation function
 	 * 

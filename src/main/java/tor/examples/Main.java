@@ -1,10 +1,7 @@
 package tor.examples;
 
 import org.bouncycastle.util.encoders.Base64;
-import tor.OnionRouter;
-import tor.TorCircuit;
-import tor.TorCrypto;
-import tor.TorSocket;
+import tor.*;
 
 import java.io.IOException;
 import java.security.PublicKey;
@@ -12,6 +9,9 @@ import java.security.PublicKey;
 public class Main {
 
     public static void main(String[] args) throws IOException  {
+        byte descid[] = HiddenService.getDescId("lorpzyxqxscsmscx", null, (byte)0);
+        HiddenService.findResposibleDirectories(TorSocket.getConsensus(), descid);
+
         // TODO Auto-generated method stub
         OnionRouter local = new OnionRouter("nas", "72B0520B03E7657C04EA244545EBEA47A7E9FB0E", "127.0.0.1", 9001, 0) {
             @Override
