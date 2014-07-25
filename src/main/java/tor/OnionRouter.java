@@ -9,6 +9,7 @@ import java.net.InetAddress;
 import java.net.URL;
 import java.net.UnknownHostException;
 import java.security.PublicKey;
+import java.util.HashSet;
 
 public class OnionRouter {
     String name;
@@ -17,6 +18,7 @@ public class OnionRouter {
 	int dirport;
 	PublicKey pubKey = null;
 	public String identityhash;
+    public HashSet<String> flags = new HashSet<String>();
 	
 	public OnionRouter(String _nm, String _ident, String _ip, int _orport, int _dirport) throws UnknownHostException {
 		name = _nm;

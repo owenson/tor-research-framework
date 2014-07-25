@@ -190,7 +190,7 @@ public class SOCKSProxy {
             }
         };
 
-        OnionRouter guard = TorSocket.getConsensus().getRouterByName("southsea0");
+        OnionRouter guard = Consensus.getConsensus().getRouterByName("southsea0");
         TorSocket sock = new TorSocket(guard);
 
         // connected---------------

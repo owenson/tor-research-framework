@@ -1,6 +1,7 @@
 package tor;
 
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import sun.misc.IOUtils;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocket;
@@ -79,14 +80,16 @@ public class TorSocket {
 
     private byte[] blockingRead(int length) throws IOException {
        byte buf[] = new byte[length];
-       int off = 0;
-       while(length>off) {
-           int rlen = in.read(buf, off, length-off);
-           if(rlen == -1)
-               throw new IOException("failed read");
-           off+=rlen;
-       }
-       return buf;
+       return IOUtils.readFully(in, length, true);
+
+//       int off = 0;
+//       while(length>off) {
+//           int rlen = in.read(buf, off, length-off);
+//           if(rlen == -1)
+//               throw new IOException("failed read");
+//           off+=rlen;
+//       }
+//       return buf;
     }
 	
 	/**
@@ -174,12 +177,6 @@ public class TorSocket {
 		return circ;
 	}
 	
-	public static Consensus getConsensus() throws IOException {
-		if(consensus == null)
-			consensus = new Consensus();
-		return consensus;
-	}
-	
 	/*public TorSocket(OnionRouter guard) throws IOException  {
 		this(guard.ip.getHostAddress(), guard.orport);
 	}*/
@@ -192,7 +189,8 @@ public class TorSocket {
 	 */
 	public TorSocket(OnionRouter fh) throws IOException  {
 
-		if(consensus == null) consensus = new Consensus();
+		if(consensus == null) consensus = Consensus.getConsensus();
+
 		//firstHop = consensus.getRouterByIpPort(host, port);
         firstHop = fh;
 		if(firstHop == null)

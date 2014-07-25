@@ -53,6 +53,8 @@ public class TorStream {
 	 * @return Received bytes
 	 */
 	public byte[] recv(int bytes, boolean block) throws IOException {
+        if(recv.isEmpty() && state == STATES.DESTROYED)
+            throw new IOException("stream destroyed");
         if (block) {
             synchronized (this) {
                 while (recv.isEmpty()) {
@@ -64,8 +66,6 @@ public class TorStream {
                 }
             }
         }
-        if(state == STATES.DESTROYED)
-            throw new IOException("stream destroyed");
 		return recv.get(bytes);
 	}
 

@@ -35,16 +35,26 @@ public class TorCircuit {
 	public static final int RELAY_RESOLVE = 11;
 	public static final int RELAY_RESOLVED = 12;
 	public static final int RELAY_BEGIN_DIR = 13;
-	
-	// temp vars for created/extended
+
+    public static final int RELAY_COMMAND_ESTABLISH_INTRO = 32;
+    public static final int RELAY_COMMAND_ESTABLISH_RENDEZVOUS = 33;
+    public static final int RELAY_COMMAND_INTRODUCE1 = 34;
+    public static final int RELAY_COMMAND_INTRODUCE2 = 35;
+    public static final int RELAY_COMMAND_RENDEZVOUS1 = 36;
+    public static final int RELAY_COMMAND_RENDEZVOUS2 = 37;
+    public static final int RELAY_COMMAND_INTRO_ESTABLISHED = 38;
+    public static final int RELAY_COMMAND_RENDEZVOUS_ESTABLISHED = 39;
+    public static final int RELAY_COMMAND_INTRODUCE_ACK = 40;
+
+    // temp vars for created/extended
 	private BigInteger temp_x;
 	private OnionRouter temp_r;
 	
 	// this circuit hop
 	private LinkedList<OnionRouter> circuitToBuild = new LinkedList<OnionRouter>();
 	private ArrayList<TorHop> hops = new ArrayList<TorHop>();
-	
-    public enum STATES { NONE, CREATING, EXTENDING, READY, DESTROYED }
+
+    public enum STATES { NONE, CREATING, EXTENDING, READY, DESTROYED, RENDEZVOUS_WAIT, RENDEZVOUS_ESTABLISHED }
 	public STATES state = STATES.NONE;
     private Object stateNotify = new Object();
 	
@@ -102,9 +112,13 @@ public class TorCircuit {
 		String hops[] = hopList.split(",");
 		create(sock.firstHop); // must go to first hop first
 		for(String s : hops) {
-			circuitToBuild.add(sock.getConsensus().getRouterByName(s));
+			circuitToBuild.add(Consensus.getConsensus().getRouterByName(s));
 		}
 	}
+
+    public void create() throws IOException {
+        create(sock.firstHop);
+    }
 
 	/**
 	 * Sends a create cell to specified hop (usually first hop that we're already connected to)
@@ -264,32 +278,43 @@ public class TorCircuit {
             setState(STATES.READY);
 	}
 	
-	/**
-	 * Creates a stream using this circuit and connects to a host
-	 * 
-	 * @param host Hostname/ip
-	 * @param port Port
-	 * @param list A listener for stream events
-	 * 
-	 * @return TorStream object
-	 */
-	public TorStream createStream(String host, int port, TorStream.TorStreamListener list) throws IOException {
+	public TorStream createDirStream(TorStream.TorStreamListener list) throws IOException {
 		if(state == STATES.DESTROYED)
 			throw new RuntimeException("Trying to use destroyed circuit");
 		
-		byte b[] = new byte[100];
-		ByteBuffer buf = ByteBuffer.wrap(b); 
-		buf.put((host+":"+port).getBytes("UTF-8"));
-		buf.put((byte)0); // null terminator
-		buf.putInt(0);
         //TODO: allocate stream and circuit IDS properly
 		int stid = streamId_counter++;
-		send(b, RELAY_BEGIN, false, (short) stid);
+		send(null, RELAY_BEGIN_DIR, false, (short) stid);
 		TorStream st = new TorStream(stid, this, list);
 		streams.put(new Integer(stid), st);
 		return st;
 	}
-	
+
+    /**
+     * Creates a stream using this circuit and connects to a host
+     *
+     * @param host Hostname/ip
+     * @param port Port
+     * @param list A listener for stream events
+     *
+     * @return TorStream object
+     */
+    public TorStream createStream(String host, int port, TorStream.TorStreamListener list) throws IOException {
+        if(state == STATES.DESTROYED)
+            throw new RuntimeException("Trying to use destroyed circuit");
+
+        byte b[] = new byte[100];
+        ByteBuffer buf = ByteBuffer.wrap(b);
+        buf.put((host+":"+port).getBytes("UTF-8"));
+        buf.put((byte)0); // null terminator
+        buf.putInt(0);
+        //TODO: allocate stream and circuit IDS properly
+        int stid = streamId_counter++;
+        send(b, RELAY_BEGIN, false, (short) stid);
+        TorStream st = new TorStream(stid, this, list);
+        streams.put(new Integer(stid), st);
+        return st;
+    }
 	/**
 	 * Gererates a relay cell, encrypts and sends it
 	 * 
@@ -312,6 +337,14 @@ public class TorCircuit {
 		sock.sendCell(circId, early ? Cell.RELAY_EARLY:Cell.RELAY, encrypt(relcell));
         sentPackets ++;
         sentBytes += relcell.length;
+    }
+
+    public byte[] rendezvousCookie = new byte[20];
+    public void rendezvousSetup() throws IOException {
+
+        TorCrypto.rnd.nextBytes(rendezvousCookie);
+        send(rendezvousCookie, RELAY_COMMAND_ESTABLISH_RENDEZVOUS, false, (short)0);
+        setState(STATES.RENDEZVOUS_WAIT);
     }
 
     public void destroy() throws IOException {
@@ -370,8 +403,14 @@ public class TorCircuit {
 			int digest = buf.getInt();
 			int length = buf.getShort();
 			byte data[] = Arrays.copyOfRange(c.payload, 1 + 2 + 2 + 4 + 2, 1 + 2 + 2 + 4 + 2 + length);
-			
-			switch(cmd) {
+
+//            System.out.println("got relayed "+cmd+" pl "+Hex.toHexString(data));
+
+            switch(cmd) {
+                case RELAY_COMMAND_RENDEZVOUS_ESTABLISHED:
+                    setState(STATES.RENDEZVOUS_ESTABLISHED);
+                    break;
+
 				case RELAY_EXTENDED: // extended
 					handleCreated(data);
 
