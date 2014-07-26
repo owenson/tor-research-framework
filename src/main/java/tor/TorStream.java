@@ -32,6 +32,10 @@ public class TorStream {
         }
     }
 
+    public void sendHTTPGETRequest(String url, String host) throws IOException {
+        send(("GET "+url+" HTTP/1.1\r\nHost: "+host+"\r\n\r\n").getBytes());
+    }
+
     public void waitForState(STATES desired) {
         while(true) {
             synchronized (this) {

@@ -88,7 +88,7 @@ public class HiddenService {
                 @Override
                 public void connected(TorStream s) {
                     try {
-                        s.send(("GET /tor/rendezvous2/"+new Base32().encodeAsString(HiddenService.getDescId(onion, (byte) 0)).toLowerCase()+" HTTP/1.0\r\n\r\n").getBytes());
+                        s.sendHTTPGETRequest("/tor/rendezvous2/"+new Base32().encodeAsString(HiddenService.getDescId(onion, (byte) 0)), "dirreq");
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
@@ -199,10 +199,10 @@ public class HiddenService {
 
         ipcirc.send(introcell, TorCircuit.RELAY_COMMAND_INTRODUCE1, false, (short)0);
         System.out.println("Waiting for introduce acknowledgement");
-        ipcirc.waitForState(TorCircuit.STATES.INTRODUCED);
+        ipcirc.waitForState(TorCircuit.STATES.INTRODUCED, false);
 
         System.out.println("Now waiting for rendezvous connect");
-        rendz.waitForState(TorCircuit.STATES.RENDEZVOUS_COMPLETE);
+        rendz.waitForState(TorCircuit.STATES.RENDEZVOUS_COMPLETE, false);
 
         ipcirc.destroy(); // no longer needed
 

@@ -34,7 +34,7 @@ public class HiddenServiceExample {
             @Override
             public void connected(TorStream s) {
                 try {
-                    s.send("GET / HTTP/1.0\r\n\r\n".getBytes());
+                    s.sendHTTPGETRequest("/", ONION+".onion");
                 } catch (IOException e) {
                     e.printStackTrace();
                 }

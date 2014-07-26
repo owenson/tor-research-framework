@@ -185,7 +185,7 @@ public class SOCKSProxy {
         // establish a circuit
         TorCircuit circ = sock.createCircuit(false);
         circ.createRoute("TorLand1");
-        circ.waitForState(TorCircuit.STATES.READY);
+        circ.waitForState(TorCircuit.STATES.READY, false);
 
         System.out.println("READY!!");
 

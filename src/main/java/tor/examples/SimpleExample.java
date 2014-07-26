@@ -15,11 +15,14 @@ public class SimpleExample {
         Consensus con = Consensus.getConsensus();
         TorSocket sock = new TorSocket(con.getRouterByName("turtles"));
         TorCircuit circ = sock.createCircuit(true);
-        circ.createRoute("Snowden4ever,tor26");
+        circ.createRoute("Snowden4ever,TorLand1");
+        //circ.waitForState(TorCircuit.STATES.READY);
 
-        TorStream stream = circ.createStream("www.slashdot.org", 80, null);
+        TorStream stream = circ.createStream("slashdot.org", 80, null);
         stream.waitForState(TorStream.STATES.READY);
-        System.out.println(new String(stream.recv(1024,true)));
+        stream.sendHTTPGETRequest("/", "slashdot.org");
+        stream.waitForState(TorStream.STATES.DESTROYED);
+        System.out.println(">>>" + new String(stream.recv(1024,true)));
 
     }
 }

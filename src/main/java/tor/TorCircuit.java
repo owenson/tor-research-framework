@@ -83,14 +83,13 @@ public class TorCircuit {
 
     public void setState(STATES newState) {
         synchronized (stateNotify) {
-            System.out.println(state);
             state = newState;
             stateNotify.notifyAll();
         }
     }
 
-    public void waitForState(STATES desired) {
-        if(state.equals(desired))
+    public void waitForState(STATES desired, boolean waitIfAlready) {
+        if(!waitIfAlready && state.equals(desired))
             return;
         while(true) {
             synchronized (stateNotify) {
@@ -116,14 +115,14 @@ public class TorCircuit {
 			throw new RuntimeException("Trying to use destroyed circuit");
 		
 		String hops[] = hopList.split(",");
+        for(String s : hops) {
+            circuitToBuild.add(Consensus.getConsensus().getRouterByName(s));
+        }
 		create(sock.firstHop); // must go to first hop first
-		for(String s : hops) {
-			circuitToBuild.add(Consensus.getConsensus().getRouterByName(s));
-		}
 
         if(blocking)
-            waitForState(STATES.READY);
-	}
+            waitForState(STATES.READY, false);
+    }
 
     public void create() throws IOException {
         create(sock.firstHop);
@@ -142,8 +141,8 @@ public class TorCircuit {
 		sock.sendCell(circId, Cell.CREATE, createPayload(r));
 
         if(blocking)
-            waitForState(STATES.READY);
-	}
+            waitForState(STATES.READY, true);
+    }
 	
 	/**
 	 * Builds create cell payload (e.g. tap handshake)
@@ -245,7 +244,7 @@ public class TorCircuit {
 	 * @throws  
 	 */
 	public void extend(OnionRouter nextHop) throws IOException  {
-		if(state == STATES.DESTROYED)
+        if(state == STATES.DESTROYED)
 			throw new RuntimeException("Trying to use destroyed circuit");
 		
 		TorHop lastHop = getLastHop();
@@ -265,7 +264,7 @@ public class TorCircuit {
 		setState(STATES.EXTENDING);
 
         if(blocking)
-            waitForState(STATES.READY);
+            waitForState(STATES.READY, false);
 	}
 	
 	/**
@@ -362,7 +361,7 @@ public class TorCircuit {
         setState(STATES.RENDEZVOUS_WAIT);
 
         if(blocking)
-            waitForState(STATES.RENDEZVOUS_ESTABLISHED);
+            waitForState(STATES.RENDEZVOUS_ESTABLISHED, false);
     }
 
     public void destroy() throws IOException {
@@ -382,7 +381,6 @@ public class TorCircuit {
 	public boolean handleCell(Cell c) throws IOException {
 		boolean handled = false;
 
-
         if(receiveWindow < 900) {
             //System.out.println("sent SENDME (CIRCUIT): " + receiveWindow);
             send(null, RELAY_SENDME, false, (short)0);
@@ -394,10 +392,14 @@ public class TorCircuit {
 		
 		if(c.cmdId == Cell.CREATED) // create
 		{
-			handleCreated(c.payload);
+            handleCreated(c.payload);
 			
-			if(!circuitToBuild.isEmpty()) // more?
-				extend(circuitToBuild.removeFirst());
+			if(!circuitToBuild.isEmpty()) {// more?
+                boolean block = blocking;
+                setBlocking(false);
+                extend(circuitToBuild.removeFirst());
+                setBlocking(block);
+            }
 			
 			handled = true;	
 		} 
@@ -422,8 +424,6 @@ public class TorCircuit {
 			int length = buf.getShort();
 			byte data[] = Arrays.copyOfRange(c.payload, 1 + 2 + 2 + 4 + 2, 1 + 2 + 2 + 4 + 2 + length);
 
-//            System.out.println("got relayed "+cmd+" pl "+Hex.toHexString(data));
-
             switch(cmd) {
                 case RELAY_COMMAND_INTRODUCE_ACK:
                     setState(STATES.INTRODUCED);
@@ -442,8 +442,12 @@ public class TorCircuit {
 				case RELAY_EXTENDED: // extended
 					handleCreated(data);
 
-					if(!circuitToBuild.isEmpty()) // needs extending further?
-						extend(circuitToBuild.removeFirst());
+					if(!circuitToBuild.isEmpty()) { // needs extending further?
+                        boolean block = blocking;
+                        setBlocking(false);
+                        extend(circuitToBuild.removeFirst());
+                        setBlocking(block);
+                    }
                     else
                         setState(STATES.READY);
 					break;
@@ -463,7 +467,9 @@ public class TorCircuit {
 						stream._putRecved(data);
 					break;
 				case RELAY_END:
-					if(stream != null) {
+                    if(data[0] != 6)
+                        System.out.println("Remote stream closed with error code "+(short)data[0]);
+                    if(stream != null) {
 						stream.notifyDisconnect();
 						streams.remove(new Integer(streamid));
 					}					
