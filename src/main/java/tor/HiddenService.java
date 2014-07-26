@@ -1,5 +1,6 @@
 package tor;
 
+import org.apache.commons.codec.DecoderException;
 import org.apache.commons.codec.binary.Base32;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.lang.ArrayUtils;
@@ -7,8 +8,10 @@ import org.bouncycastle.util.encoders.Base64;
 import tor.util.TorDocumentParser;
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
+import java.security.PublicKey;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.TreeMap;
@@ -73,11 +76,9 @@ public class HiddenService {
             System.out.println(or);
 
             // establish circuit to responsible director
-            TorCircuit circ = sock.createCircuit();
+            TorCircuit circ = sock.createCircuit(true);
             circ.create();
-            circ.waitForState(TorCircuit.STATES.READY);
             circ.extend(ors[0]);
-            circ.waitForState(TorCircuit.STATES.READY);
 
             // asynchronous call
             TorStream st = circ.createDirStream(new TorStream.TorStreamListener() {
@@ -125,8 +126,10 @@ public class HiddenService {
         return null;
     }
 
-    public static TorCircuit establishHSCircuit(TorSocket sock, String onion) throws IOException {
+    public static TorCircuit sendIntroduce(TorSocket sock, String onion, TorCircuit rendz) throws IOException {
+        System.out.println("Fetching Hidden Service Descriptor");
         String hsdescTxt = fetchHSDescriptor(sock,onion);
+        OnionRouter rendzOR = rendz.getLastHop().router;
 
 
         // parse the hidden service descriptor
@@ -137,8 +140,71 @@ public class HiddenService {
         TorDocumentParser intros = new TorDocumentParser(intopointsb64);
         // get first intro point
         String introPointIdentities[] = intros.getArrayItem("introduction-point");
-        String ip0 = Hex.encodeHexString(new Base32().decode(introPointIdentities[0].toUpperCase()));
-        System.out.println(Consensus.getConsensus().routers.get(ip0));
+
+        int introPointNum = 0;
+
+        String ip0 = Hex.encodeHexString(new Base32().decode(introPointIdentities[introPointNum].toUpperCase()));
+        OnionRouter ip0or = Consensus.getConsensus().routers.get(ip0);
+        byte[] serviceKey = Base64.decode(intros.getArrayItem("service-key")[introPointNum]);
+        byte skHash[] = TorCrypto.getSHA1().digest(serviceKey);
+        assert(skHash.length==20);
+        System.out.println(ip0or);
+
+        System.out.println("Creating introduction circuit");
+        TorCircuit ipcirc = sock.createCircuit(true);
+        ipcirc.create();
+        ipcirc.extend(ip0or);
+
+        // outer packet
+        ByteBuffer buf = ByteBuffer.allocate(1024);
+        buf.put(skHash); // service PKhash
+
+        // inner handshake
+        ByteBuffer handshake = ByteBuffer.allocate(1024);
+        handshake.put((byte)2); //ver
+        handshake.put(rendzOR.ip.getAddress());  // rendz IP addr
+        handshake.putShort((short)rendzOR.orport);
+        try {
+            handshake.put(new Hex().decode(rendzOR.identityhash.getBytes()));
+        } catch (DecoderException e) {
+            e.printStackTrace();
+        }
+        handshake.putShort((short)rendzOR.pubKeyraw.length);  // rendz key len
+        handshake.put(rendzOR.pubKeyraw); // rendz key
+        handshake.put(rendz.rendezvousCookie);  //rend cookie
+
+        // tap handshake / create handshake
+        byte priv_x[] = new byte[128];
+        TorCrypto.rnd.nextBytes(priv_x);   // g^x
+        rendz.temp_x = new BigInteger(priv_x);
+        rendz.temp_r = null;
+
+        BigInteger pubKey = TorCrypto.DH_G.modPow(rendz.temp_x, TorCrypto.DH_P);
+        byte pubKeyByte[] = TorCrypto.BNtoByte(pubKey);
+        handshake.put(pubKeyByte);
+
+        handshake.flip();
+
+        // convert to byte array
+        byte handshakeBytes [] = new byte[handshake.remaining()];
+        handshake.get(handshakeBytes);
+
+        // encrypt handshake
+        PublicKey skPK = TorCrypto.asn1GetPublicKey(serviceKey);
+        buf.put(TorCrypto.hybridEncrypt(handshakeBytes, skPK));
+
+        buf.flip();
+        byte introcell[] = new byte[buf.remaining()];
+        buf.get(introcell);
+
+        ipcirc.send(introcell, TorCircuit.RELAY_COMMAND_INTRODUCE1, false, (short)0);
+        System.out.println("Waiting for introduce acknowledgement");
+        ipcirc.waitForState(TorCircuit.STATES.INTRODUCED);
+
+        System.out.println("Now waiting for rendezvous connect");
+        rendz.waitForState(TorCircuit.STATES.RENDEZVOUS_COMPLETE);
+
+        ipcirc.destroy(); // no longer needed
 
         return null;
 

@@ -2,9 +2,11 @@ package tor.util;
 
 
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang.StringUtils;
 
 import java.io.IOException;
 import java.io.StringReader;
+import java.util.Arrays;
 import java.util.TreeMap;
 
 /**
@@ -19,32 +21,41 @@ public class TorDocumentParser {
     public TorDocumentParser(String doc) throws IOException {
         String curKey = null;
         String curVal = null;
-        for(Object ln : IOUtils.readLines(new StringReader(doc))) {
-            if(((String)ln).equals(""))
+        String lns [] = (String[])IOUtils.readLines(new StringReader(doc)).toArray(new String[0]);
+
+        for (int i = 0; i < lns.length; i++) {
+            String ln = lns[i];
+            if(ln.equals(""))
                 continue;
 
-            String sp[] = ((String)ln).split(" ");
-            if(curKey != null && sp[0].indexOf("BEGIN")!=-1)
-                continue;
-            else if(curKey != null && sp[0].indexOf("END")!=-1) {
-                addItem(curKey, curVal);
-                curKey = null;
-                curVal = null;
-                continue;
-            } else if(curKey != null) {
-                curVal += (String)ln;
-                continue;
+            String sp[] = ln.split(" ");
+            boolean nextBegin = lns.length> i+1 ? lns[i+1].contains("BEGIN"):false;
+
+            if(sp.length == 1 && nextBegin) { // single word and multiline
+                // see if next line contains begin
+                String key = sp[0], val="";
+
+                i+=2;
+                for(; i<lns.length; i++) {
+                    if(lns[i].contains("END")) {
+                        break;
+                    }
+                    val += lns[i];
+                }
+                addItem(key, val);
+            } else if(sp.length == 1) { // single word but not multiline
+                addItem(sp[0], "");
             }
-            else if(sp.length >= 2) {
-                addItem(sp[0], sp[1]);
-            } else {
-                curKey = sp[0];
-                curVal = "";
+            else { // regular line
+                addItem(sp[0], StringUtils.join(Arrays.copyOfRange(sp, 1, sp.length), " "));
             }
+
+
         }
-        for (String k : map.keySet()) {
-            System.out.println(k + "|||= " + map.get(k));
-        }
+
+//        for (String k : map.keySet()) {
+//            System.out.println(k + "|||= " + map.get(k));
+//        }
     }
 
     public void addItem(String k, String v) {

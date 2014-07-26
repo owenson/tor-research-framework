@@ -15,10 +15,7 @@ import java.util.TreeMap;
 
 public class TorCircuit {
 
-	public static BigInteger DH_G = new BigInteger("2");
-	public static BigInteger DH_P = new BigInteger("179769313486231590770839156793787453197860296048756011706444423684197180216158519368947833795864925541502180565485980503646440548199239100050792877003355816639229553136239076508735759914822574862575007425302077447712589550957937778424442426617334727629299387668709205606050270810842907692932019128194467627007");
-	
-	private static int circId_counter = 1;
+    private static int circId_counter = 1;
 	int circId = 0;
 	
 	public static short streamId_counter = 1;
@@ -47,17 +44,23 @@ public class TorCircuit {
     public static final int RELAY_COMMAND_INTRODUCE_ACK = 40;
 
     // temp vars for created/extended
-	private BigInteger temp_x;
-	private OnionRouter temp_r;
+    public BigInteger temp_x;
+	public OnionRouter temp_r;
+
+    public void setBlocking(boolean blocking) {
+        this.blocking = blocking;
+    }
+
+    boolean blocking = false;
 	
 	// this circuit hop
 	private LinkedList<OnionRouter> circuitToBuild = new LinkedList<OnionRouter>();
 	private ArrayList<TorHop> hops = new ArrayList<TorHop>();
 
-    public enum STATES { NONE, CREATING, EXTENDING, READY, DESTROYED, RENDEZVOUS_WAIT, RENDEZVOUS_ESTABLISHED }
+    public enum STATES { NONE, CREATING, EXTENDING, READY, DESTROYED, RENDEZVOUS_WAIT, RENDEZVOUS_ESTABLISHED, RENDEZVOUS_COMPLETE, INTRODUCED }
 	public STATES state = STATES.NONE;
     private Object stateNotify = new Object();
-	
+
 	// list of active streams for this circuit
 	TreeMap<Integer, TorStream> streams = new TreeMap<Integer, TorStream>();
 	// streams with packets to send
@@ -80,12 +83,15 @@ public class TorCircuit {
 
     public void setState(STATES newState) {
         synchronized (stateNotify) {
+            System.out.println(state);
             state = newState;
             stateNotify.notifyAll();
         }
     }
 
     public void waitForState(STATES desired) {
+        if(state.equals(desired))
+            return;
         while(true) {
             synchronized (stateNotify) {
                 try {
@@ -114,6 +120,9 @@ public class TorCircuit {
 		for(String s : hops) {
 			circuitToBuild.add(Consensus.getConsensus().getRouterByName(s));
 		}
+
+        if(blocking)
+            waitForState(STATES.READY);
 	}
 
     public void create() throws IOException {
@@ -131,6 +140,9 @@ public class TorCircuit {
 		
 		setState(STATES.CREATING);
 		sock.sendCell(circId, Cell.CREATE, createPayload(r));
+
+        if(blocking)
+            waitForState(STATES.READY);
 	}
 	
 	/**
@@ -149,7 +161,7 @@ public class TorCircuit {
 		temp_r = r;
 		
 		// generate pub key
-		BigInteger pubKey = DH_G.modPow(temp_x, DH_P);
+		BigInteger pubKey = TorCrypto.DH_G.modPow(temp_x, TorCrypto.DH_P);
 		byte pubKeyByte[] = TorCrypto.BNtoByte(pubKey);
 		return TorCrypto.hybridEncrypt(pubKeyByte, r.getPubKey());
 	}
@@ -251,6 +263,9 @@ public class TorCircuit {
 		//sock.sendCell(circId, Cell.RELAY_EARLY, payload);
 		
 		setState(STATES.EXTENDING);
+
+        if(blocking)
+            waitForState(STATES.READY);
 	}
 	
 	/**
@@ -266,7 +281,7 @@ public class TorCircuit {
 		byte kh[] = Arrays.copyOfRange(in,  TorCrypto.DH_LEN, TorCrypto.DH_LEN+TorCrypto.HASH_LEN);
 		
 		//calculate g^xy shared secret
-		BigInteger secret = TorCrypto.byteToBN(y_bytes).modPow(temp_x, DH_P);
+		BigInteger secret = TorCrypto.byteToBN(y_bytes).modPow(temp_x, TorCrypto.DH_P);
 		
 		// derive key data data
 		byte kdf[] = TorCrypto.torKDF(TorCrypto.BNtoByte(secret), 3*TorCrypto.HASH_LEN + 2*TorCrypto.KEY_LEN);
@@ -345,6 +360,9 @@ public class TorCircuit {
         TorCrypto.rnd.nextBytes(rendezvousCookie);
         send(rendezvousCookie, RELAY_COMMAND_ESTABLISH_RENDEZVOUS, false, (short)0);
         setState(STATES.RENDEZVOUS_WAIT);
+
+        if(blocking)
+            waitForState(STATES.RENDEZVOUS_ESTABLISHED);
     }
 
     public void destroy() throws IOException {
@@ -407,6 +425,16 @@ public class TorCircuit {
 //            System.out.println("got relayed "+cmd+" pl "+Hex.toHexString(data));
 
             switch(cmd) {
+                case RELAY_COMMAND_INTRODUCE_ACK:
+                    setState(STATES.INTRODUCED);
+                    break;
+
+                case RELAY_COMMAND_RENDEZVOUS2:
+                    assert state == STATES.RENDEZVOUS_ESTABLISHED;
+                    handleCreated(data);
+                    setState(STATES.RENDEZVOUS_COMPLETE);
+                    break;
+
                 case RELAY_COMMAND_RENDEZVOUS_ESTABLISHED:
                     setState(STATES.RENDEZVOUS_ESTABLISHED);
                     break;

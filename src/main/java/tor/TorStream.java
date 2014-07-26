@@ -10,7 +10,7 @@ public class TorStream {
 	int streamId;
 	TorCircuit circ;
 
-    enum STATES { CONNECTING, READY, DESTROYED };
+    public enum STATES { CONNECTING, READY, DESTROYED };
     STATES state = STATES.CONNECTING;
 
 	ByteFifo recv = new ByteFifo(4096);

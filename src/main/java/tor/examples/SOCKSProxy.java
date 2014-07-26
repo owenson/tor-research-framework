@@ -1,6 +1,5 @@
 package tor.examples;
 
-import org.bouncycastle.util.encoders.Base64;
 import tor.*;
 
 import java.io.IOException;
@@ -11,7 +10,6 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.security.PublicKey;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -21,7 +19,6 @@ import java.util.Set;
  * Created by gho on 27/06/14.
  */
 public class SOCKSProxy {
-    // socks client class
     class SocksClient implements TorStream.TorStreamListener{
         SocketChannel client;
         boolean connected;
@@ -181,31 +178,22 @@ public class SOCKSProxy {
 
     long lastTimeoutCheck = 0;
     public SOCKSProxy() throws IOException {
-        OnionRouter local = new OnionRouter("nas", "5C493EC1D035322D6575A84F040687EC5D2FA241", "192.168.0.8", 8001, 0) {
-            @Override
-            public PublicKey getPubKey() throws IOException {
-                return TorCrypto.asn1GetPublicKey(Base64.decode("MIGJAoGBAMTF1X28OmCN+gt7fwRiL9fI/hd3nKdAN/sBXOrDAB/A9CW/Dd2avqeX\n" +
-                        "ZKarmW3HbVZAdTGECu39p9h6lf5NHbLR2ZSDghcP5qb9m4ZsNg+PeLwu7M5cYRnR\n" +
-                        "GTHIh8ybRpGGtoCoL+mVF8MCNSfELCXQ9S3YTzqN/IzyrM3+lt0HAgMBAAE="));
-            }
-        };
-
+        // connect through a guard
         OnionRouter guard = Consensus.getConsensus().getRouterByName("southsea0");
         TorSocket sock = new TorSocket(guard);
 
-        // connected---------------
-        TorCircuit circ = sock.createCircuit();
-        circ.createRoute("IPredator");
-        //circ.create(guard);
+        // establish a circuit
+        TorCircuit circ = sock.createCircuit(false);
+        circ.createRoute("TorLand1");
         circ.waitForState(TorCircuit.STATES.READY);
 
         System.out.println("READY!!");
 
-        ServerSocketChannel socks = ServerSocketChannel.open();
-        socks.socket().bind(new InetSocketAddress(9050));
-        socks.configureBlocking(false);
+        ServerSocketChannel serverSock = ServerSocketChannel.open();
+        serverSock.socket().bind(new InetSocketAddress(9050));
+        serverSock.configureBlocking(false);
         Selector select = Selector.open();
-        socks.register(select, SelectionKey.OP_ACCEPT);
+        serverSock.register(select, SelectionKey.OP_ACCEPT);
 
         int lastClients = clients.size();
         // select loop
@@ -221,9 +209,9 @@ public class SOCKSProxy {
                     continue;
 
                 // new connection?
-                if (k.isAcceptable() && k.channel() == socks) {
+                if (k.isAcceptable() && k.channel() == serverSock) {
                     // server socket
-                    SocketChannel csock = socks.accept();
+                    SocketChannel csock = serverSock.accept();
                     if (csock == null)
                         continue;
                     addClient(csock, circ);
