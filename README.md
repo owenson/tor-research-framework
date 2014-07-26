@@ -31,9 +31,9 @@ the true option makes most calls to circ blocking until they have succeeded, you
     
 which will establish a circuit through the first hop and then extend it to tor26, then turtles.
 
-Once you've got a circuit build, you can create a TorStream:
+Once you've got a circuit built, you can create a TorStream:
 
-    TorStream stream = circ.createStream("hostname", "port", optionalListenerForEvents);
+    TorStream stream = circ.createStream("hostname", port, optionalListenerForEvents);
 
 Hidden Service Usage
 ====================
@@ -53,5 +53,11 @@ this will package the payload in a RELAY cell and encrypt it all the way to the 
 
 To send a raw cell just to the first hop, construct a Cell(circId, cmdId, payload) object and call TorSocket.sendCell().
 
+Troubleshooting
+===============
+
+You need the following dependencies installed: apache commons and bouncycastle.
+
+Routers go up and down, if you're just trying the examples, then be aware the hardcoded routers might be offline.
 
 
