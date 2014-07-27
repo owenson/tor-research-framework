@@ -196,7 +196,7 @@ public class HiddenService {
         // tap handshake / create handshake
         byte priv_x[] = new byte[128];
         TorCrypto.rnd.nextBytes(priv_x);   // g^x
-        rendz.temp_x = new BigInteger(priv_x);
+        rendz.temp_x = TorCrypto.byteToBN(priv_x);
         rendz.temp_r = null;
 
         BigInteger pubKey = TorCrypto.DH_G.modPow(rendz.temp_x, TorCrypto.DH_P);

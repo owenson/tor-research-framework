@@ -50,7 +50,7 @@ public class TorSocket {
 	
 	// circuits for this socket
 	TreeMap<Integer, TorCircuit> circuits = new TreeMap<Integer, TorCircuit>();
-    LinkedBlockingQueue<Cell> sendQueue = new LinkedBlockingQueue<Cell>();
+    //LinkedBlockingQueue<Cell> sendQueue = new LinkedBlockingQueue<Cell>();
     enum STATES { INITIALISING, READY };
 
     private STATES state = STATES.INITIALISING;
@@ -67,25 +67,28 @@ public class TorSocket {
 	 */
 	public void sendCell(int circid, int cmd, byte[] payload)
 			throws IOException {
-        try {
-            sendQueue.put(new Cell(circid, cmd, payload));
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
+        //try {
+            //sendQueue.put(new Cell(circid, cmd, payload));
+            out.write(new Cell(circid, cmd, payload).getBytes());
+     //   } catch (InterruptedException e) {
+     //       e.printStackTrace();
+//        }
     }
 
     public void sendCell(Cell c)
             throws IOException {
-        try {
-            sendQueue.put(c);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
+ //       try {
+            out.write(c.getBytes());
+            //sendQueue.put(c);
+     ////   } catch (InterruptedException e) {
+     ////       e.printStackTrace();
+//        }
     }
-
+/*
     public void processSendQueue() {
         while(true) {
             while (!sendQueue.isEmpty())
+                System.out.print(".");
                 try {
                     out.write(sendQueue.take().getBytes());
                 } catch (IOException e) {
@@ -95,7 +98,7 @@ public class TorSocket {
                 }
         }
 	}
-
+*/
     private byte[] blockingRead(int length) throws IOException {
        byte buf[] = new byte[length];
        return IOUtils.readFully(in, length, true);
@@ -256,12 +259,12 @@ public class TorSocket {
 		out = sslsocket.getOutputStream();
 		in = sslsocket.getInputStream();
 
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                processSendQueue();
-            }
-        }).start();
+//        new Thread(new Runnable() {
+//            @Override
+//            public void run() {
+//                processSendQueue();
+//            }
+//        }).start();
 
         new Thread(new Runnable() {
             @Override

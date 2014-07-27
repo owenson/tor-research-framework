@@ -85,7 +85,7 @@ public class TorHop {
                 '}';
     }
 
-    protected byte[] encrypt(byte[] in) {
+    public byte[] encrypt(byte[] in) {
 		return encf.update(in);
 	}
 	

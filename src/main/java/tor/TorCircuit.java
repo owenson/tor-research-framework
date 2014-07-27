@@ -18,6 +18,7 @@
 */
 package tor;
 
+import org.apache.commons.lang.ArrayUtils;
 import org.bouncycastle.util.Arrays;
 import org.bouncycastle.util.encoders.Hex;
 import tor.util.UniqueQueue;
@@ -85,7 +86,7 @@ public class TorCircuit {
 	/**
 	 * 
 	 */
-	UniqueQueue <TorStream> streamsSending = new UniqueQueue<TorStream>();
+	//UniqueQueue <TorStream> streamsSending = new UniqueQueue<TorStream>();
 
 	TorSocket sock;
 	
@@ -174,9 +175,9 @@ public class TorCircuit {
 		
 		// generate priv key
 		TorCrypto.rnd.nextBytes(privkey);
-		temp_x = new BigInteger(privkey);
+		temp_x = TorCrypto.byteToBN(privkey);
 		temp_r = r;
-		
+
 		// generate pub key
 		BigInteger pubKey = TorCrypto.DH_G.modPow(temp_x, TorCrypto.DH_P);
 		byte pubKeyByte[] = TorCrypto.BNtoByte(pubKey);
@@ -373,8 +374,13 @@ public class TorCircuit {
 
     public byte[] rendezvousCookie = new byte[20];
     public void rendezvousSetup() throws IOException {
-
         TorCrypto.rnd.nextBytes(rendezvousCookie);
+        rendezvousSetup(rendezvousCookie);
+    }
+
+    public void rendezvousSetup(byte[] cookie) throws IOException {
+        rendezvousCookie= ArrayUtils.clone(cookie);
+
         send(rendezvousCookie, RELAY_COMMAND_ESTABLISH_RENDEZVOUS, false, (short)0);
         setState(STATES.RENDEZVOUS_WAIT);
 
@@ -395,8 +401,17 @@ public class TorCircuit {
     public long receiveWindow = 1000;
     public long sendWindow = 1000;
 
+    private static String[] DESTROY_ERRORS = {"NONE", "PROTOCOL", "INTERNAL", "REQUESTED", "HIBERNATING",
+                                              "RESOURCELIMIT", "CONNECTFAILED", "OR_IDENTITY", "OR_CONN_CLOSED",
+                                              "FINISHED", "TIMEOUT", "DESTROYED", "NOSUCHSERVICE"};
 
-	public boolean handleCell(Cell c) throws IOException {
+    private static String[] STREAM_ERRORS = { "-", "REASON_MISC", "REASON_RESOLVEFAILED", "REASON_CONNECTREFUSED",
+                                              "REASON_EXITPOLICY", "REASON_DESTROY", "REASON_DONE", "REASON_TIMEOUT",
+                                              "REASON_NOROUTE", "REASON_HIBERNATING", "REASON_INTERNAL",
+                                              "REASON_RESOURCELIMIT", "REASON_CONNRESET", "REASON_TORPROTOCOL",
+                                              "REASON_NOTDIRECTORY" };
+
+    public boolean handleCell(Cell c) throws IOException {
 		boolean handled = false;
 
         if(receiveWindow < 900) {
@@ -486,7 +501,7 @@ public class TorCircuit {
 					break;
 				case RELAY_END:
                     if(data[0] != 6)
-                        System.out.println("Remote stream closed with error code "+(short)data[0]);
+                        System.out.println("Remote stream closed with error code "+STREAM_ERRORS[data[0]]);
                     if(stream != null) {
 						stream.notifyDisconnect();
 						streams.remove(new Integer(streamid));
@@ -499,7 +514,7 @@ public class TorCircuit {
 		}
 		else if (c.cmdId == Cell.DESTROY) {
 			System.out.println("Circuit destroyed "+circId);
-            System.out.println("Reason: "+Hex.toHexString(c.payload));
+            System.out.println("Reason: "+DESTROY_ERRORS[c.payload[0]]);
             for (Iterator<TorStream> iterator = streams.values().iterator(); iterator.hasNext(); ) {
                 TorStream s = iterator.next();
                 s.notifyDisconnect();
