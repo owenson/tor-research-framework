@@ -50,9 +50,7 @@ public class OnionRouter {
 	public PublicKey getPubKey() throws IOException {
 		if (pubKey != null)
 			return pubKey;
-		URL conn = new URL("http://"+Consensus.DIRSERV+"/tor/server/fp/"+identityhash);
-        String doc = IOUtils.toString(conn.openStream());
-        TorDocumentParser rdr = new TorDocumentParser(doc);
+        TorDocumentParser rdr = new TorDocumentParser(Consensus.getConsensus().getRouterDescriptor(identityhash));
 
         pubKeyraw = Base64.decodeBase64(rdr.getItem("onion-key"));
         pubKey = TorCrypto.asn1GetPublicKey(pubKeyraw);

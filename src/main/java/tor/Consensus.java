@@ -20,9 +20,11 @@ package tor;
 
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.io.IOUtils;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -48,22 +50,37 @@ public class Consensus {
     };
 	
 	public Consensus() throws IOException {
-        Pattern p = Pattern.compile("/([0-9]+\\.){4}\\:[0-9]+/");
+            fetchConsensus();
+    }
+
+    /***
+     * Try each authority in turn until we get a successful dir stream
+     *
+     * @param path Desired dir path
+     * @return InputStream for reading
+     */
+    public InputStream getDirectoryStream(String path) {
         for (String auth : authorities) {
             String sp[] = auth.split(" ");
             String ipp[] = sp[3].split(":");
-            System.out.println("Fetching consensus from authority: "+sp[0]);
-            if(fetchConsensus(ipp[0], Integer.parseInt(ipp[1])))
-                return;
+            System.out.println("Connecting to authority: " + sp[0]);
+            try {
+                URL url = new URL("http://"+ipp[0]+":"+ipp[1]+path);
+                InputStream in = url.openStream();
+                return in;
+            } catch (IOException e) {
+               continue;
+            }
         }
-        throw new RuntimeException("Cant get consensus");
+        return null;
     }
 
-    private boolean fetchConsensus(String ip, int dirport) {
+    private boolean fetchConsensus() {
         try {
-            URL conurl = new URL("http://" + ip + ":" + dirport + "/tor/status-vote/current/consensus.z");
+            //URL conurl = new URL("http://" + ip + ":" + dirport + "/tor/status-vote/current/consensus.z");
+            InputStream connStream = getDirectoryStream("/tor/status-vote/current/consensus.z");
 
-            BufferedReader in = new BufferedReader(new InputStreamReader(new InflaterInputStream(conurl.openStream())));
+            BufferedReader in = new BufferedReader(new InputStreamReader(new InflaterInputStream(connStream)));
             String ln = null;
             OnionRouter cur = null;
             while ((ln = in.readLine()) != null)
@@ -125,5 +142,17 @@ public class Consensus {
             }
         }
         return map;
+    }
+
+    public OnionRouter getRandomORWithFlag(String flag) {
+        TreeMap<String, OnionRouter> map = getORsWithFlag(flag);
+
+        OnionRouter ors[] = map.values().toArray(new OnionRouter[0]);
+        int idx = TorCrypto.rnd.nextInt(ors.length);
+        return ors[idx];
+    }
+
+    public String getRouterDescriptor(String hash) throws IOException {
+        return IOUtils.toString(getDirectoryStream("/tor/server/fp/"+hash));
     }
 }

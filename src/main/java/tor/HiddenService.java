@@ -98,6 +98,8 @@ public class HiddenService {
             circ.create();
             circ.extend(ors[0]);
 
+            final int replica = i<3 ? 0 : 1;
+
             // asynchronous call
             TorStream st = circ.createDirStream(new TorStream.TorStreamListener() {
                 @Override
@@ -106,7 +108,7 @@ public class HiddenService {
                 @Override
                 public void connected(TorStream s) {
                     try {
-                        s.sendHTTPGETRequest("/tor/rendezvous2/"+new Base32().encodeAsString(HiddenService.getDescId(onion, (byte) 0)), "dirreq");
+                        s.sendHTTPGETRequest("/tor/rendezvous2/"+new Base32().encodeAsString(HiddenService.getDescId(onion, (byte) replica)), "dirreq");
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
