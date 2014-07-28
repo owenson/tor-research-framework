@@ -46,7 +46,8 @@ public class TorCircuit {
     public static final int RELAY_SENDME = 5;
 	public static final int RELAY_EXTEND = 6;
 	public static final int RELAY_EXTENDED = 7;
-	public static final int RELAY_EARLY = 9;
+	public static final int RELAY_TRUNCATE = 8;
+    public static final int RELAY_TRUNCATED = 9;
     public static final int RELAY_DROP = 10;
 	public static final int RELAY_RESOLVE = 11;
 	public static final int RELAY_RESOLVED = 12;
@@ -438,7 +439,15 @@ public class TorCircuit {
 		} 
 		else if (c.cmdId == Cell.RELAY) // relay cell
 		{
-			c.payload = decrypt(c.payload);
+            int cellFromHop = -1;
+            for (int di = 0; di<=hops.size(); di++) {
+               c.payload = hops.get(di).decrypt(c.payload);
+               if(c.payload[1] == 0 && c.payload[2] == 0) {
+                   cellFromHop = di;
+                   break;
+               }
+            }
+            //c.payload = decrypt(c.payload);
 			
 			// decode relay header
 			ByteBuffer buf = ByteBuffer.wrap(c.payload);
@@ -457,6 +466,8 @@ public class TorCircuit {
 			int length = buf.getShort();
 			byte data[] = Arrays.copyOfRange(c.payload, 1 + 2 + 2 + 4 + 2, 1 + 2 + 2 + 4 + 2 + length);
 
+            if(cellFromHop!=hops.size()-1)
+                System.out.println("CELL FROM INTERMEDIATE HOP " + cellFromHop);
             switch(cmd) {
                 case RELAY_COMMAND_INTRODUCE_ACK:
                     setState(STATES.INTRODUCED);
@@ -471,6 +482,16 @@ public class TorCircuit {
                 case RELAY_COMMAND_RENDEZVOUS_ESTABLISHED:
                     setState(STATES.RENDEZVOUS_ESTABLISHED);
                     break;
+
+                case RELAY_TRUNCATED:
+                    System.out.println("TRUNCATED CELL RECEIVED - Cannot handle yet! "+DESTROY_ERRORS[c.payload[0]]);
+                    for (int hi = hops.size()-1; hi > cellFromHop ; hi--) {
+                        System.out.println("removing hop "+hi+" from circ");
+                        hops.remove(hi);
+                    }
+
+                    throw new RuntimeException("see err above");
+                    //break;
 
 				case RELAY_EXTENDED: // extended
 					handleCreated(data);

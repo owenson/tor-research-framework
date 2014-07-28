@@ -34,11 +34,28 @@ public class SimpleExample {
         //circ.extend(con.getRandomORWithFlag("Exit"));
         circ.createRoute("Snowden4ever,abbie");
 
-        TorStream stream = circ.createStream("ghowen.me", 80, null);
-        stream.waitForState(TorStream.STATES.READY);
-        stream.sendHTTPGETRequest("/ip", "ghowen.me");
-        stream.waitForState(TorStream.STATES.DESTROYED);
-        System.out.println(">>>" + new String(stream.recv(1024,true)));
+        TorStream stream = circ.createStream("slashdot.org", 80, new TorStream.TorStreamListener() {
+            @Override
+            public void dataArrived(TorStream s) {
+                try {
+                    System.out.println(">>>" + new String(s.recv(1024,false)));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
 
+            @Override
+            public void connected(TorStream s) {
+                try {
+                    s.sendHTTPGETRequest("/", "slashdot.org");
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+
+            }
+
+            @Override public void disconnected(TorStream s) {  }
+            @Override public void failure(TorStream s) {  }
+        });
     }
 }
