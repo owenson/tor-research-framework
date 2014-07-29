@@ -54,7 +54,7 @@ public class Consensus {
             "Faravahar orport=443 v3ident=EFCBE720AB3A82B99F9E953CD5BF50F7EEFC7B97 154.35.32.5:80 CF6D 0AAF B385 BE71 B8E1 11FC 5CFF 4B47 9237 33BC"
     };
 	
-	public Consensus() {
+	public Consensus() throws RuntimeException {
             fetchConsensus();
     }
 
