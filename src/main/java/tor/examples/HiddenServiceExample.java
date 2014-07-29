@@ -43,7 +43,7 @@ public class HiddenServiceExample {
         // Connect to hidden service on port 80 and download a page
         TorStream hiddenServiceStream = rendz.createStream("", 80, null);
         hiddenServiceStream.waitForState(TorStream.STATES.READY);
-        hiddenServiceStream.sendHTTPGETRequest("/", ONION);
+        hiddenServiceStream.sendHTTPGETRequest("/", ONION+".onion");
 
         System.out.println("HS - fetching index.html...");
 
