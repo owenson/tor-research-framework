@@ -250,8 +250,16 @@ public class TorCircuit {
 		return data;
 	}
 
+    /**
+     * Return the last TorHop in this circuit, excluding the first hop.
+     *
+     * @return the last TorHop, or null if there are no TorHops in the circuit.
+     */
     public TorHop getLastHop() {
-        return hops.get(hops.size()-1);
+        if (hops.size() < 1)
+            return null;
+        else
+            return hops.get(hops.size()-1);
     }
 	
 	/**
@@ -264,7 +272,9 @@ public class TorCircuit {
         if(state == STATES.DESTROYED)
 			throw new RuntimeException("Trying to use destroyed circuit");
 		
-		TorHop lastHop = getLastHop();
+        // Unused, throws ArrayIndexOutOfBoundsException when extend() is called after createCircuit()
+        // without the fix to getLastHop() which returns null when hops.size() == 0
+		//TorHop lastHop = getLastHop();
 		
 		byte create[] =  createPayload(nextHop);
 		byte extend[] = new byte [4 + 2 + create.length + TorCrypto.HASH_LEN];
