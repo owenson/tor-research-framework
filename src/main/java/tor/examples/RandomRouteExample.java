@@ -23,7 +23,9 @@ import tor.TorCircuit;
 import tor.TorSocket;
 import tor.TorStream;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 
 /**
  * Created by twilsonb on 29/07/2014.
@@ -42,29 +44,16 @@ public class RandomRouteExample {
         circ.extend(con.getRandomORWithFlag("Exit,Running,Valid".split(","), 80));
         //circ.createRoute("Snowden4ever,abbie");
 
-        TorStream stream = circ.createStream("www.amazon.com", 80, new TorStream.TorStreamListener() {
-            @Override
-            public void dataArrived(TorStream s) {
-                try {
-                    // The ">>>" makes it hard to view the downloaded HTML in a browser
-                    System.out.println(/* ">>>" +*/ new String(s.recv(1024,false)));
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
+        TorStream stream = circ.createStream("ghowen.me", 80, null);
+        stream.waitForState(TorStream.STATES.READY);
 
-            @Override
-            public void connected(TorStream s) {
-                try {
-                    s.sendHTTPGETRequest("/", "www.amazon.com");
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+        System.out.println("Connected to remote host through Tor");
+        stream.sendHTTPGETRequest("/ip", "ghowen.me");
 
-            }
+        BufferedReader rdr = new BufferedReader(new InputStreamReader(stream.getInputStream()));
 
-            @Override public void disconnected(TorStream s) {  }
-            @Override public void failure(TorStream s) {  }
-        });
+        String line;
+        while ((line = rdr.readLine()) != null)
+            System.out.println(line);
     }
 }
