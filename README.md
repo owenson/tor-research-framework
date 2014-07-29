@@ -39,7 +39,8 @@ OR
 
     circ.create()
     // .. optionally more extends ..
-    circ.extend(con.getORWithFlag("Exit");
+    // circ.extend(con.getORWithFlag("Running");
+    circ.extend(con.getORWithFlag("Exit,Running".split(","), port);
     
 
 Once you've got a circuit built, you can create a TorStream:
