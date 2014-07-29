@@ -253,7 +253,7 @@ public class TorCrypto {
 			try {
 				dis.close();
 			} catch (Exception exc) {
-				;
+				/* ignore */;
 			}
 		}
 	}
