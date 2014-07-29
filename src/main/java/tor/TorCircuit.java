@@ -19,17 +19,13 @@
 package tor;
 
 import org.apache.commons.lang.ArrayUtils;
-import org.bouncycastle.util.Arrays;
 import org.bouncycastle.util.encoders.Hex;
 
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.TreeMap;
+import java.util.*;
 
 public class TorCircuit {
 
@@ -393,6 +389,20 @@ public class TorCircuit {
     public void destroy() throws IOException {
         sock.sendCell(circId, Cell.DESTROY, null);
     }
+
+    /**
+     * Set the digest to zero for a relay payload - used by hash calculation code in handleReceived()
+     *
+     * @param relayCell
+     * @return cell with digest removed
+     */
+    public byte[] relayCellRemoveDigest(byte [] relayCell) {
+        byte buf[] = new byte[relayCell.length];
+        System.arraycopy(relayCell, 0, buf, 0, 5);
+        System.arraycopy(relayCell, 9, buf, 9, relayCell.length-9);
+        return buf;
+    }
+
 	/**
 	 * Handles cell for this circuit
 	 * 
@@ -440,16 +450,40 @@ public class TorCircuit {
 		} 
 		else if (c.cmdId == Cell.RELAY) // relay cell
 		{
+            // cell decrypt logic - decrypt from each hop in turn checking recognised and digest until success
+            // remember, we can receive cells from intermediate hops, so it's an iterative decrypt and check if successful
+            // for each hop.
             int cellFromHop = -1;
-            for (int di = 0; di<=hops.size(); di++) {
-               c.payload = hops.get(di).decrypt(c.payload);
-               if(c.payload[1] == 0 && c.payload[2] == 0) {
-                   cellFromHop = di;
-                   break;
+            for (int di = 0; di<hops.size(); di++) {  // loop through circuit hops
+               TorHop hop = hops.get(di);
+               c.payload = hop.decrypt(c.payload); // decrypt for this hop
+
+               if(c.payload[1] == 0 && c.payload[2] == 0) { // are recognised bytes set to zero?
+                   byte nodgrl[] = relayCellRemoveDigest(c.payload); // remove digest from cell
+                   byte hash[] = Arrays.copyOfRange(c.payload, 5, 9); // put digest from cell into hash
+                   byte[] digest;
+
+                   try {  // calculate the digest that we thing it should be
+                       // must clone here to stop clobbering original
+                       digest = ((MessageDigest)hop.db_md.clone()).digest(nodgrl);
+                   } catch (CloneNotSupportedException e) {
+                       throw new RuntimeException(e);
+                   }
+
+                   // compare our calculations with digest in cell - if right, we've decrypted correctly
+                   if(Arrays.equals(hash, Arrays.copyOfRange(digest, 0, 4))) {
+                       hop.db_md.update(nodgrl); // update digest for hop for future cells
+                       cellFromHop = di;  // hop number this cell is from
+                       break;
+                   }
                }
             }
-            //c.payload = decrypt(c.payload);
-			
+            if(cellFromHop == -1) {
+                System.out.println("unrecognised cell - didn't decrypt");
+                return false;
+            }
+            // successfully decrypted - now let's proceed
+
 			// decode relay header
 			ByteBuffer buf = ByteBuffer.wrap(c.payload);
 			int cmd = buf.get();
@@ -460,8 +494,10 @@ public class TorCircuit {
 			int streamid = buf.getShort();
 			TorStream stream = streams.get(new Integer(streamid));
 			
-			if(streamid > 0 && stream == null)
-				System.out.println("invalid stream id "+streamid);
+			if(streamid > 0 && stream == null) {
+                System.out.println("invalid stream id " + streamid);
+                return false;
+            }
 			
 			int digest = buf.getInt();
 			int length = buf.getShort();

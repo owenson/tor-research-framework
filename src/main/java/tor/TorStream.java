@@ -34,7 +34,7 @@ public class TorStream {
     public enum STATES { CONNECTING, READY, DESTROYED };
     STATES state = STATES.CONNECTING;
 
-	public ByteFifo recvBuffer = new ByteFifo(4096);
+	public ByteFifo recvBuffer = new ByteFifo(16384);
 	TorStreamListener listener;
 
     int recvWindow = 500;

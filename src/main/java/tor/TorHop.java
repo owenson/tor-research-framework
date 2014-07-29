@@ -55,8 +55,9 @@ public class TorHop {
 
 		try {
 			df_md = MessageDigest.getInstance("SHA-1");
-			
 			df_md.update(df);
+            db_md = MessageDigest.getInstance("SHA-1");
+            db_md.update(db);
 
 			IvParameterSpec ivSpec = new IvParameterSpec(new byte [] {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0});	
 			SecretKeySpec keysp = new SecretKeySpec(kf, "AES");
@@ -92,4 +93,5 @@ public class TorHop {
 	protected byte[] decrypt(byte[] in) {
 		return encb.update(in);
 	}
+
 }

@@ -18,7 +18,6 @@
 */
 package tor.examples;
 
-import org.apache.commons.io.IOUtils;
 import tor.*;
 
 import java.io.IOException;
@@ -116,7 +115,10 @@ public class SOCKSProxy {
                 if(!client.isConnected())
                     removeClient(this);
 
-                client.write(ByteBuffer.wrap(IOUtils.toByteArray(s.getInputStream())));
+                int availBytes = s.getInputStream().available();
+                byte buf[] = new byte[availBytes];
+                s.getInputStream().read(buf);
+                client.write(ByteBuffer.wrap(buf));
             } catch (IOException e) {
                 try {
                     //System.out.println(e);
