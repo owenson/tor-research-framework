@@ -9,8 +9,7 @@ Introduction
 
 The framework is a Java Tor client that is designed to be easy to read and modify at the code level.  There are a number of examples in the examples directory on how to use the framework.  Modifying the core framework code should be relatively straight forward for someone loosely familiar with the Tor protocol.
 
-The easiest way to get started is to import the project into IntelliJ and hopefully maven should fetch all the dependencies for you.
-IntelliJ will require the tor module's Language Level to be set to at least 7.0 to compile the multi-catch statements used by the project.
+The easiest way to get started is to import the project into IntelliJ and hopefully maven should fetch all the dependencies for you. IntelliJ will require the tor module's Language Level to be set to at least 7.0 to compile the multi-catch statements used by the project (File-Project Structure-Language Level).
 
 Before you do anything, you'll need a copy of the Consensus from a directory authority (which contains a list of nodes in the Tor network).  Code:
 
