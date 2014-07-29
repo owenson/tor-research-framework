@@ -36,6 +36,24 @@ public class TorDocumentParser {
     // prduces a map from a normal tor document, key/value pairs
     // parses block BEGIN-ENDS correctly
     // where same key appears twice, value is the concatenated values with | as a delimiter
+
+    // the order of the IPv4 accept/reject exit policies matters, and this order is destroyed by the parser
+    // we therefore substitute a synthesised key for accept/reject lines ("ipv4-policy" like the ipv6-policy key),
+    // and we prepend accept or reject to each line, using space as a second-level separator
+    // i.e. accept 80|reject *:*
+    public final static String IPv4PolicyKey = "ipv4-policy";
+
+    private static TreeMap<String,String> keyReplacementMap;
+
+    public TreeMap<String,String> KeyReplacementMap() {
+        if (keyReplacementMap == null) {
+            keyReplacementMap = new TreeMap<String,String>();
+            keyReplacementMap.put("accept", IPv4PolicyKey);
+            keyReplacementMap.put("reject", IPv4PolicyKey);
+        }
+        return keyReplacementMap;
+    }
+
     public TorDocumentParser(String doc) throws IOException {
         String curKey = null;
         String curVal = null;
@@ -77,21 +95,36 @@ public class TorDocumentParser {
     }
 
     public void addItem(String k, String v) {
-        if(!map.containsKey(k))
-            map.put(k, v);
-        else {
-            map.put(k, map.get(k)+ "|" + v);
+        // keys in the replacement map are replaced by the corresponding key in the map
+        // the original key is prepended to the value, separated by a space
+        if (KeyReplacementMap().containsKey(k)) {
+            addItem(KeyReplacementMap().get(k), k + " " + v);
+        } else {
+            if (!map.containsKey(k))
+                map.put(k, v);
+            else {
+                map.put(k, map.get(k) + "|" + v);
+            }
         }
     }
 
     public String[] getArrayItem(String k) {
-        String s[] = map.get(k).split("\\|");
-        if(s.length < 2)
-            throw new RuntimeException("error - not array item");
-        return s;
+        // keys in the replacement map are replaced by the corresponding key in the map
+        if (KeyReplacementMap().containsKey(k)) {
+            return getArrayItem(KeyReplacementMap().get(k));
+        } else {
+            String s[] = map.get(k).split("\\|");
+            if (s.length < 2)
+                throw new RuntimeException("error - not array item");
+            return s;
+        }
     }
 
     public String getItem(String k) {
-        return map.get(k);
+        // keys in the replacement map are replaced by the corresponding key in the map
+        if (KeyReplacementMap().containsKey(k))
+            return getItem(KeyReplacementMap().get(k));
+        else
+            return map.get(k);
     }
 }

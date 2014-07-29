@@ -26,16 +26,21 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.InetAddress;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.UnknownHostException;
+import java.util.Arrays;
 import java.util.TreeMap;
 import java.util.regex.Pattern;
 import java.util.zip.InflaterInputStream;
 
 public class Consensus {
 	public final static String DIRSERV = "86.59.21.38";
-	
+
+    // The maximum number of connection tries to directory caches before falling back to authorities
+    public final static int MAX_TRIES = 10;
+
 	public TreeMap<String, OnionRouter> routers = new TreeMap<String, OnionRouter>();
     String authorities[] = {    "moria1 orport=9101 v3ident=D586D18309DED4CD6D57C18FDB97EFA96D330566 128.31.0.39:9131 9695 DFC3 5FFE B861 329B 9F1A B04C 4639 7020 CE31",
             "tor26 orport=443 v3ident=14C131DFC5C6F93646BE72FA1401C02A8DF2E8B4 86.59.21.38:80 847B 1F85 0344 D787 6491 A548 92F9 0493 4E4E B85D",
@@ -54,25 +59,89 @@ public class Consensus {
     }
 
     /***
-     * Try each authority in turn until we get a successful dir stream
+     * Try random directories until we get a successful dir stream, falling back to the pre-configured authorities after MAX_TRIES,
+     * or if we don't have an existing consensus
      *
      * @param path Desired dir path
      * @return InputStream for reading
      */
     public InputStream getDirectoryStream(String path) {
-        for (String auth : authorities) {
+        return getDirectoryStream(path, true);
+    }
+
+    /***
+     * Try random directories until we get a successful dir stream, falling back to the pre-configured authorities after MAX_TRIES,
+     * or if we don't have an existing consensus
+     *
+     * If you're having speed issues, try adding "Fast" to the lists of flags below.
+     *
+     * @param path Desired dir path
+     * @param useDirectoryCaches use directory caches, if an existing consensus is available
+     * @return InputStream for reading
+     */
+    public InputStream getDirectoryStream(String path, Boolean useDirectoryCaches) {
+        String directoryType = "directory cache";
+
+        // Avoid recursion by checking for an existing consensus before calling getRandomORWithFlag()
+        if (consensus != null && useDirectoryCaches) {
+            // Try up to MAX_TRIES random ORs,
+            // but don't try more than the number of running, valid, directory routers
+            // (because this is random, some may be tried twice, and some may be skipped)
+            int dirRouterCount = getORsWithFlag("V2Dir,Running,Valid").size();
+            int dirTriesLimit = Math.min(dirRouterCount, MAX_TRIES);
+
+            int i;
+            for (i = 0; i < dirTriesLimit; i++) {
+                // The V2Dir flag includes both authorities and directory caches
+                // These typically makes up around 60% of routers
+                // We could filter out authorities, but they make up less than 1% of the directories
+
+                // Get a list of running, valid, directory routers, excluding bad exits
+                // Typically, 80% of routers are running, and almost all are valid
+                OnionRouter dir = getRandomORWithFlag("V2Dir,Running,Valid");
+
+                System.out.println("Connecting to " + directoryType + ": " + dir.name);
+                try {
+                    return connectToDirectoryStream(dir.ip, dir.dirport, path);
+                } catch (IOException e) {
+                    continue;
+                }
+            }
+        }
+
+        directoryType = "authority";
+        int authTriesLimit = Math.min(authorities.length, MAX_TRIES);
+
+        // Try up to MAX_TRIES random authorities,
+        // but don't try more than the number of listed authorities
+        // (because this is random, some may be tried twice, and some may be skipped)
+
+        int tries;
+        for (tries = 0; tries < authTriesLimit; tries++) {
+
+            int i = TorCrypto.rnd.nextInt(authorities.length);
+            String auth = authorities[i];
             String sp[] = auth.split(" ");
             String ipp[] = sp[3].split(":");
-            System.out.println("Connecting to authority: " + sp[0]);
+            System.out.println("Connecting to " + directoryType + ": " + sp[0]);
             try {
-                URL url = new URL("http://"+ipp[0]+":"+ipp[1]+path);
-                InputStream in = url.openStream();
-                return in;
+                return connectToDirectoryStream(ipp[0], ipp[1], path);
             } catch (IOException e) {
                continue;
             }
         }
         return null;
+    }
+
+    private InputStream connectToDirectoryStream(InetAddress address, int port, String path) throws IOException {
+        return connectToDirectoryStream(address.getHostAddress(), String.valueOf(port), path);
+    }
+
+    private InputStream connectToDirectoryStream(String address, String port, String path) throws IOException {
+        URL url = new URL("http://"+address+":"+port+path);
+        System.out.println("Downloading: " + url.toString());
+        InputStream in = url.openStream();
+        return in;
     }
 
     private boolean fetchConsensus() {
@@ -109,12 +178,54 @@ public class Consensus {
 
     private static Consensus consensus = null;
 
+    /***
+     * Return a consensus, populating it if needed
+     *
+     * @return populated Consensus
+     */
     public static Consensus getConsensus() {
-        if(consensus == null) {
+        // Default: don't retrieve an updated consensus, and don't return a new consensus object
+        return getConsensus(false, false);
+    }
+
+    /***
+     * Return an updated, new consensus, leaving existing consensus references as-is;
+     * or return the existing consensus object with existing data
+     *
+     * @param retrieveUpdatedConsensus return a new, updated consensus
+     * @return populated Consensus
+     */
+    public static Consensus getConsensus(Boolean retrieveUpdatedConsensus) {
+        return getConsensus(retrieveUpdatedConsensus, retrieveUpdatedConsensus);
+    }
+
+    /***
+     * Return an updated, new consensus, leaving existing consensus references as-is;
+     * or return the existing consensus object with existing data
+     *
+     * @param retrieveUpdatedConsensus update the consensus before returning it
+     * @param returnNewConsensus return a new consensus object, rather than the existing one.
+     *                           returnNewConsensus implies retrieveUpdatedConsensus.
+     * @return populated Consensus
+     */
+    public static Consensus getConsensus(Boolean retrieveUpdatedConsensus, Boolean returnNewConsensus) {
+        // If returnNewConsensus is false, we call fetchConsensus() on the current consensus object (if it exists)
+        // This updates the data in existing consensus references (which could cause unexpected results)
+        if (consensus == null || retrieveUpdatedConsensus || returnNewConsensus) {
             try {
-                consensus = new Consensus();
+                if (consensus == null || returnNewConsensus) {
+                    consensus = new Consensus();
+                } else {
+                    Boolean updateSucceeded = consensus.fetchConsensus();
+                    if (!updateSucceeded) {
+                        // Is it better to fail to update, or fail to keep the same consensus object?
+                        // We update, even if it means creating a new object
+                        System.out.println("getConsensus: fetchConsensus failed, returning new Consensus object");
+                        consensus = new Consensus();
+                    }
+                }
             } catch (IOException e) {
-                throw new RuntimeException("Cant get consensus: "+e);
+                throw new RuntimeException("Can't get consensus: " + e);
             }
         }
         return consensus;
@@ -134,21 +245,112 @@ public class Consensus {
 		throw new RuntimeException("unknown router");
 	}
 
+    /***
+     * Return the routers with the supplied flag(s), excluding bad exits.
+     * See https://consensus-health.torproject.org for a list of known flags.
+     *
+     * @param flag the desired flag(s) (case-sensitive). Multiple flags should be supplied in a comma-separated list.
+     * @return a TreeMap of each router with the specified flag(s), indexed by identityhash
+     */
     public TreeMap<String,OnionRouter> getORsWithFlag(String flag) {
+        return getORsWithFlag(flag.split(","), true);
+    }
+
+    /***
+     * Return the routers with all of the supplied flags, excluding bad exits
+     * See https://consensus-health.torproject.org for a list of known flags.
+     *
+     * @param flags the desired flags (case-sensitive)
+     * @return a TreeMap of each router with the specified flags, indexed by identityhash
+     */
+    public TreeMap<String,OnionRouter> getORsWithFlag(String[] flags) {
+        return getORsWithFlag(flags, true);
+    }
+
+    /***
+     * Return the routers with all of the supplied flags, optionally excluding bad exits.
+     * See https://consensus-health.torproject.org for a list of known flags.
+     * Because OnionRouter.acceptsIPv4ExitPort is an expensive operation, we perform it in the getRandom*() functions.
+     *
+     * @param flags the desired flags (case-sensitive)
+     * @param excludeBadExits exclude routers with the BadExit flags (these are considered unreliable for some purposes)
+     * @return a TreeMap of each router with the specified flags, indexed by identityhash
+     */
+    public TreeMap<String,OnionRouter> getORsWithFlag(String[] flags, Boolean excludeBadExits) {
         TreeMap<String,OnionRouter> map = new TreeMap<String,OnionRouter>();
         for (OnionRouter r : routers.values()) {
-            if(r.flags.contains(flag)) {
+            if(r.flags.containsAll(Arrays.asList(flags))
+                    // either we're including (not excluding) bad exits, or we filter out routers with the bad exit flag
+                    && (!excludeBadExits || !r.flags.contains("BadExit"))) {
                 map.put(r.identityhash, r);
             }
         }
         return map;
     }
 
-    public OnionRouter getRandomORWithFlag(String flag) {
-        TreeMap<String, OnionRouter> map = getORsWithFlag(flag);
 
+    /***
+     * Return a (cryptographically) random router with the supplied flag(s), excluding bad exits.
+     * See https://consensus-health.torproject.org for a list of known flags.
+     *
+     * @param flag the desired flag(s) (case-sensitive). Multiple flags should be supplied in a comma-separated list.
+     * @return a random router with the specified flag(s)
+     */
+    public OnionRouter getRandomORWithFlag(String flag) {
+        return getRandomORWithFlag(flag.split(","), 0, true);
+    }
+
+    /***
+     * Return a (cryptographically) random router with all of the supplied flags, excluding bad exits.
+     * See https://consensus-health.torproject.org for a list of known flags.
+     *
+     * @param flags the desired flags (case-sensitive)
+     * @return a random router with the specified flags
+     */
+    public OnionRouter getRandomORWithFlag(String[] flags) {
+        return getRandomORWithFlag(flags, 0, true);
+    }
+
+    /***
+     * Return the routers with all of the supplied flags and the specified exitPort, excluding bad exits.
+     * See https://consensus-health.torproject.org for a list of known flags.
+     *
+     * @param flags the desired flags (case-sensitive)
+     * @param exitPort the desired exit port in the router's exit policy (or 0 to ignore exit policies)
+     * @return a random router with the specified flags
+     */
+    public OnionRouter getRandomORWithFlag(String[] flags, int exitPort) {
+        return getRandomORWithFlag(flags, exitPort, true);
+    }
+
+    /***
+     * Return the routers with all of the supplied flags and the specified exitPort, optonally excluding bad exits.
+     * See https://consensus-health.torproject.org for a list of known flags.
+     *
+     * @param flags the desired flags (case-sensitive)
+     * @param exitPort the desired exit port in the router's exit policy (or 0 to ignore exit policies)
+     * @param excludeBadExits exclude routers with the BadExit flags (these are considered unreliable for some purposes)
+     * @return a random router with the specified flags
+     */
+    public OnionRouter getRandomORWithFlag(String[] flags, int exitPort, Boolean excludeBadExits) {
+        TreeMap<String, OnionRouter> map = getORsWithFlag(flags, excludeBadExits);
         OnionRouter ors[] = map.values().toArray(new OnionRouter[0]);
+
         int idx = TorCrypto.rnd.nextInt(ors.length);
+
+        // ignore exitPort 0
+        if (exitPort != 0) {
+
+            Boolean acceptsExitPort = ors[idx].acceptsIPv4ExitPort(exitPort);
+
+            // iterate through the routers until we find one that accepts the desired exitPort
+            while (!acceptsExitPort) {
+                idx = TorCrypto.rnd.nextInt(ors.length);
+                acceptsExitPort = ors[idx].acceptsIPv4ExitPort(exitPort);
+            }
+
+        }
+
         return ors[idx];
     }
 
