@@ -4,6 +4,10 @@ by Gareth Owen (drgowen@gmail.com - www.ghowen.me)
 
 LICENCE: GNU GPL v3
 
+Contributors
+
+- [twilsonb](https://github.com/twilsonb)
+
 Introduction
 ============
 
