@@ -27,17 +27,29 @@ and now, presumably, you'll want to build a circuit:
 
     TorCircuit circ = sock.createCircuit(true);
     
-the true option makes most calls to circ blocking until they have succeeded, you'll know if you want this or not (if you don't use blocking, you can optionally use circ.waitForState().  At this stage, a circuit isn't built, for that you need to do one of two things, either call create() which will establish a circuit to just the first hop, or do the following:
+the true option makes most calls to circ blocking until they have succeeded, you'll know if you want this or not (if you don't use blocking, you can optionally use circ.waitForState()).  At this stage, a circuit isn't built, for that you can take one of two approaches as shown below:
 
     circ.createRoute("tor26,turtles");
+
+OR
+
+    circ.create()
+    // .. optionally more extends ..
+    circ.extend(con.getORWithFlag("Exit");
     
-which will establish a circuit through the first hop and then extend it to tor26, then turtles.
 
 Once you've got a circuit built, you can create a TorStream:
 
     TorStream stream = circ.createStream("hostname", port, optionalListenerForEvents);
     
-if you choose not to use the listener, you can use stream.waitForState() to wait for it to be in various states before reading.  If its READY then the connection is established, and if its DESTROYED the the connection was closed.
+If you choose not to use the listener, you can use stream.waitForState() to wait for it to be in various states before reading.  If its READY then the connection is established, and if its DESTROYED the the connection was closed.  Note, do not perform blocking reads inside the listener, or any other time consuming activity as you'll be blocking the main Tor receive thread.
+
+Now you can use the traditional Java Input/OutputStream pattern:
+
+    stream.getInputStream();
+    stream.getOutputStream();
+    
+see SimpleExample for a complete example.
 
 Hidden Service Usage
 ====================
@@ -47,15 +59,15 @@ See the example provided.  Lots of useful functions in HiddenService class.
 Advanced Usage
 ==============
 
-TorSocket creates two threads, one to process incoming cells which it'll automatically handle by passing them off to the respective TorCircuit.handleReceived(), and another to process the send queues of circuits.
+TorSocket creates one thread in TorSocket constructor to process incoming cells, which it'll then automatically handle by passing them off to the respective TorCircuit.handleReceived().  TorCircuit.handleReceived() will pass them to the appropriate TorStream() if necessary.
 
-To send a packet down a circuit, you can use:
+To send a custom packet down a circuit, you can use:
 
     circ.send(payload, RELAY_*, false, (short)streamID);
     
-this will package the payload in a RELAY cell and encrypt it all the way to the last hop and then send it.
+This will package the payload in a RELAY cell and encrypt it all the way to the last hop and then send it.
 
-To send a raw cell just to the first hop, construct a Cell(circId, cmdId, payload) object and call TorSocket.sendCell().
+To send a raw cell to the first hop, construct a Cell(circId, cmdId, payload) object and call TorSocket.sendCell().
 
 Troubleshooting
 ===============

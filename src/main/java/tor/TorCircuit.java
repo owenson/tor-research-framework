@@ -21,7 +21,6 @@ package tor;
 import org.apache.commons.lang.ArrayUtils;
 import org.bouncycastle.util.Arrays;
 import org.bouncycastle.util.encoders.Hex;
-import tor.util.UniqueQueue;
 
 import java.io.IOException;
 import java.math.BigInteger;
@@ -108,13 +107,15 @@ public class TorCircuit {
         }
     }
 
-    public void waitForState(STATES desired, boolean waitIfAlready) {
+    public void waitForState(STATES desired, boolean waitIfAlready) throws IOException {
         if(!waitIfAlready && state.equals(desired))
             return;
         while(true) {
             synchronized (stateNotify) {
                 try {
                     stateNotify.wait();
+                    if(state == STATES.DESTROYED && desired!=STATES.DESTROYED)
+                        throw new IOException("Waiting for unreachable state - circuit destroyed");
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }

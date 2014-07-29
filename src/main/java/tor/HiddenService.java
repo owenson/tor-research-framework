@@ -21,6 +21,7 @@ package tor;
 import org.apache.commons.codec.DecoderException;
 import org.apache.commons.codec.binary.Base32;
 import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.ArrayUtils;
 import org.bouncycastle.util.encoders.Base64;
 import tor.util.TorDocumentParser;
@@ -131,7 +132,7 @@ public class HiddenService {
             }
 
             // get HTTP response and body
-            String data = new String(st.recv(4096, false));
+            String data = IOUtils.toString(st.getInputStream());
 
             // HTTP success code
             if(data.length()<1 || !data.split(" ")[1].equals("200")) {

@@ -18,9 +18,14 @@
 */
 package tor.examples;
 
-import tor.*;
+import tor.Consensus;
+import tor.TorCircuit;
+import tor.TorSocket;
+import tor.TorStream;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 
 /**
  * Created by gho on 26/07/14.
@@ -30,32 +35,22 @@ public class SimpleExample {
         Consensus con = Consensus.getConsensus();
         TorSocket sock = new TorSocket(con.getRouterByName("turtles"));
         TorCircuit circ = sock.createCircuit(true);
+
+        // use createRoute as below, or you can use create() followed by extend() manually
         //circ.create();
         //circ.extend(con.getRandomORWithFlag("Exit"));
         circ.createRoute("Snowden4ever,abbie");
 
-        TorStream stream = circ.createStream("slashdot.org", 80, new TorStream.TorStreamListener() {
-            @Override
-            public void dataArrived(TorStream s) {
-                try {
-                    System.out.println(">>>" + new String(s.recv(1024,false)));
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
+        TorStream stream = circ.createStream("ghowen.me", 80, null);
+        stream.waitForState(TorStream.STATES.READY);
 
-            @Override
-            public void connected(TorStream s) {
-                try {
-                    s.sendHTTPGETRequest("/", "slashdot.org");
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+        System.out.println("Connected to remote host through Tor");
+        stream.sendHTTPGETRequest("/ip", "ghowen.me");
 
-            }
+        BufferedReader rdr = new BufferedReader(new InputStreamReader(stream.getInputStream()));
 
-            @Override public void disconnected(TorStream s) {  }
-            @Override public void failure(TorStream s) {  }
-        });
+        String line;
+        while ((line = rdr.readLine()) != null)
+            System.out.println(line);
     }
 }

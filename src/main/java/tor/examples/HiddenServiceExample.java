@@ -20,7 +20,9 @@ package tor.examples;
 
 import tor.*;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 
 public class HiddenServiceExample {
 
@@ -39,30 +41,19 @@ public class HiddenServiceExample {
         HiddenService.sendIntroduce(sock, ONION, rendz);
 
         // Connect to hidden service on port 80 and download a page
-        rendz.createStream("", 80, new TorStream.TorStreamListener() {
-            @Override
-            public void dataArrived(TorStream s) {
-                try {
-                    System.out.println(new String(s.recv(1024, false)));
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-
-            @Override
-            public void connected(TorStream s) {
-                try {
-                    s.sendHTTPGETRequest("/", ONION+".onion");
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-
-            @Override public void disconnected(TorStream s) {  }
-            @Override public void failure(TorStream s) {  }
-        });
+        TorStream hiddenServiceStream = rendz.createStream("", 80, null);
+        hiddenServiceStream.waitForState(TorStream.STATES.READY);
+        hiddenServiceStream.sendHTTPGETRequest("/", ONION);
 
         System.out.println("HS - fetching index.html...");
+
+        BufferedReader rdr = new BufferedReader(new InputStreamReader(hiddenServiceStream.getInputStream()));
+
+        String line;
+        while ((line=rdr.readLine())!=null)
+            System.out.println(line);
+
+
 
     }
 

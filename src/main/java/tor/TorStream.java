@@ -20,6 +20,8 @@
 package tor;
 
 import tor.util.ByteFifo;
+import tor.util.TorInputStream;
+import tor.util.TorOutputStream;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -32,16 +34,30 @@ public class TorStream {
     public enum STATES { CONNECTING, READY, DESTROYED };
     STATES state = STATES.CONNECTING;
 
-	ByteFifo recv = new ByteFifo(4096);
+	public ByteFifo recvBuffer = new ByteFifo(4096);
 	TorStreamListener listener;
 
     int recvWindow = 500;
     final static int recvWindowIncrement = 50;
+
+    public TorInputStream getInputStream() {
+        return in;
+    }
+
+    public TorOutputStream getOutputStream() {
+        return out;
+    }
+
+    TorInputStream in;
+    TorOutputStream out;
 	
 	public TorStream(int streamId, TorCircuit circ, TorStreamListener list) {
 		this.streamId = streamId;
 		this.circ = circ;
 		listener = list;
+
+        in = new TorInputStream(this);
+        out = new TorOutputStream(this);
 	}
 
     public void setState(STATES newState) {
@@ -55,11 +71,13 @@ public class TorStream {
         send(("GET "+url+" HTTP/1.1\r\nHost: "+host+"\r\n\r\n").getBytes());
     }
 
-    public void waitForState(STATES desired) {
+    public void waitForState(STATES desired) throws IOException {
         while(true) {
             synchronized (this) {
                 try {
-                    this.wait();
+                    this.wait(1000);
+                    if(state == STATES.DESTROYED && desired!=STATES.DESTROYED)
+                        throw new IOException("Waiting for unreachable state - circuit destroyed");
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
@@ -68,28 +86,33 @@ public class TorStream {
                 return;
         }
     }
-	/**
-	 * Get received data from this stream (e.g. data received from remote end)
-	 * 
-	 * @param bytes How many bytes? -1 for max.
-	 * 
-	 * @return Received bytes
-	 */
-	public byte[] recv(int bytes, boolean block) throws IOException {
-        if(recv.isEmpty() && state == STATES.DESTROYED)
-            throw new IOException("stream destroyed");
+
+    /**
+     * Reads from receive buffer, blocking until bytes available.
+     * @param output
+     * @param block
+     * @return bytes received
+     * @throws IOException
+     */
+	public synchronized int recv(byte output[], boolean block) throws IOException {
         if (block) {
             synchronized (this) {
-                while (recv.isEmpty()) {
+                while (recvBuffer.isEmpty() && state!=STATES.DESTROYED) {
                     try {
-                        wait();
+                        wait(1000);
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
                 }
             }
         }
-		return recv.get(bytes);
+
+        if(recvBuffer.isEmpty() && state == STATES.DESTROYED)
+            return -1;
+
+        byte out[] = recvBuffer.get(output.length);
+        System.arraycopy(out, 0, output, 0, out.length);
+		return out.length;
 	}
 
 	
@@ -134,12 +157,12 @@ public class TorStream {
             recvWindow += recvWindowIncrement;
         }
 
-		recv.put(b);
-		if(listener != null)
-			listener.dataArrived(this);
+		recvBuffer.put(b);
         synchronized (this) {
             this.notifyAll();
         }
+		if(listener != null)
+                    listener.dataArrived(this);
 	}
 	
 	public void notifyDisconnect() {
