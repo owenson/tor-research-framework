@@ -139,6 +139,20 @@ public class Consensus {
 
     private InputStream connectToDirectoryStream(String address, String port, String path) throws IOException {
         URL url = new URL("http://"+address+":"+port+path);
+
+        // try the compressed version first, and transparently inflate it
+        if (!path.endsWith(".z")) {
+            try {
+                URL zurl = new URL("http://" + address + ":" + port + path + ".z");
+                System.out.println("Downloading: " + zurl.toString());
+                InflaterInputStream infl = new InflaterInputStream(zurl.openStream());
+                return infl;
+            } catch (IOException e) {
+                System.out.println("Transparent download of compressed stream failed, falling back to uncompressed."
+                        + " Exception: " + e.toString());
+            }
+        }
+
         System.out.println("Downloading: " + url.toString());
         InputStream in = url.openStream();
         return in;
