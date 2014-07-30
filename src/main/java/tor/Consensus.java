@@ -89,7 +89,7 @@ public class Consensus {
         String directoryType = "directory cache";
 
         // Avoid recursion by checking for an existing consensus before calling getRandomORWithFlag()
-        if (consensus != null && useOnlyAuthorities) {
+        if (consensus != null && !useOnlyAuthorities) {
             // Try up to MAX_TRIES random ORs,
             // but don't try more than the number of running, valid, directory routers
             // (because this is random, some may be tried twice, and some may be skipped)
