@@ -48,7 +48,7 @@ public class SOCKSProxyNonTor {
 
         public void newRemoteData(Selector selector, SelectionKey sk) throws IOException {
             ByteBuffer buf = ByteBuffer.allocate(1024);
-            if(remote.read(buf) == -1)
+            if (remote.read(buf) == -1)
                 throw new IOException("disconnected");
             lastData = System.currentTimeMillis();
             buf.flip();
@@ -56,12 +56,12 @@ public class SOCKSProxyNonTor {
         }
 
         public void newClientData(Selector selector, SelectionKey sk) throws IOException {
-            if(!connected) {
+            if (!connected) {
                 ByteBuffer inbuf = ByteBuffer.allocate(512);
-                if(client.read(inbuf)<1)
+                if (client.read(inbuf) < 1)
                     return;
                 inbuf.flip();
-               //inbufinbufinbufinb.get() final DataInputStream in = new DataInputStream(Channels.newInputStream(client));
+                //inbufinbufinbufinb.get() final DataInputStream in = new DataInputStream(Channels.newInputStream(client));
 //                final DataOutputStream out = new DataOutputStream(Channels.newOutputStream(client));
 
                 // read socks header
@@ -100,14 +100,14 @@ public class SOCKSProxyNonTor {
                 remote = SocketChannel.open(new InetSocketAddress(remoteAddr, port));
 
                 ByteBuffer out = ByteBuffer.allocate(20);
-                out.put((byte)0);
+                out.put((byte) 0);
                 out.put((byte) (remote.isConnected() ? 0x5a : 0x5b));
                 out.putShort((short) port);
                 out.put(remoteAddr.getAddress());
                 out.flip();
                 client.write(out);
 
-                if(!remote.isConnected())
+                if (!remote.isConnected())
                     throw new IOException("connect failed");
 
                 remote.configureBlocking(false);
@@ -116,7 +116,7 @@ public class SOCKSProxyNonTor {
                 connected = true;
             } else {
                 ByteBuffer buf = ByteBuffer.allocate(1024);
-                if(client.read(buf) == -1)
+                if (client.read(buf) == -1)
                     throw new IOException("disconnected");
                 lastData = System.currentTimeMillis();
                 buf.flip();
@@ -125,7 +125,7 @@ public class SOCKSProxyNonTor {
         }
     }
 
-    static ArrayList <SocksClient> clients = new ArrayList<>();
+    static ArrayList<SocksClient> clients = new ArrayList<>();
 
     // utility function
     public SocksClient addClient(SocketChannel s) {
@@ -149,7 +149,7 @@ public class SOCKSProxyNonTor {
 
         int lastClients = clients.size();
         // select loop
-        while(true) {
+        while (true) {
             select.select(1000);
 
             Set keys = select.selectedKeys();
@@ -193,14 +193,14 @@ public class SOCKSProxyNonTor {
             // client timeout check
             for (int i = 0; i < clients.size(); i++) {
                 SocksClient cl = clients.get(i);
-                if((System.currentTimeMillis() - cl.lastData) > 30000L) {
+                if ((System.currentTimeMillis() - cl.lastData) > 30000L) {
                     cl.client.close();
-                    if(cl.remote != null)
+                    if (cl.remote != null)
                         cl.remote.close();
                     clients.remove(cl);
                 }
             }
-            if(clients.size() != lastClients) {
+            if (clients.size() != lastClients) {
                 System.out.println(clients.size());
                 lastClients = clients.size();
             }

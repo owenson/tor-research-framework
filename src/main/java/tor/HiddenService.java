@@ -44,13 +44,13 @@ public class HiddenService {
         byte[] onionbin = new Base32().decode(onion.toUpperCase());
         assert onionbin.length == 10;
 
-        long curtime = System.currentTimeMillis()/1000L;
+        long curtime = System.currentTimeMillis() / 1000L;
         int oid = onionbin[0] & 0xff;
 
         long t = (curtime + (oid * 86400L / 256)) / 86400L;
 
         ByteBuffer buf = ByteBuffer.allocate(10);
-        buf.putInt((int)t);
+        buf.putInt((int) t);
         buf.put(replica);
         buf.flip();
 
@@ -66,7 +66,7 @@ public class HiddenService {
         Consensus con = Consensus.getConsensus();
 
         // get list of nodes with HS dir flag
-        TreeMap<String,OnionRouter> routers = con.getORsWithFlag("HSDir");
+        TreeMap<String, OnionRouter> routers = con.getORsWithFlag("HSDir");
         Object keys[] = routers.keySet().toArray();
         Object vals[] = routers.values().toArray();
 
@@ -77,7 +77,7 @@ public class HiddenService {
             int idx = -Arrays.binarySearch(keys, Hex.encodeHexString(getDescId(onionb32, (byte) replica)));
 
             for (int i = 0; i < 3; i++) {
-                rts.add((OnionRouter)vals[(idx+i) % vals.length]);
+                rts.add((OnionRouter) vals[(idx + i) % vals.length]);
             }
         }
 
@@ -99,27 +99,36 @@ public class HiddenService {
             circ.create();
             circ.extend(ors[0]);
 
-            final int replica = i<3 ? 0 : 1;
+            final int replica = i < 3 ? 0 : 1;
 
             // asynchronous call
             TorStream st = circ.createDirStream(new TorStream.TorStreamListener() {
                 @Override
-                public void dataArrived(TorStream s) { }
+                public void dataArrived(TorStream s) {
+                }
 
                 @Override
                 public void connected(TorStream s) {
                     try {
-                        s.sendHTTPGETRequest("/tor/rendezvous2/"+new Base32().encodeAsString(HiddenService.getDescId(onion, (byte) replica)), "dirreq");
+                        s.sendHTTPGETRequest("/tor/rendezvous2/" + new Base32().encodeAsString(HiddenService.getDescId(onion, (byte) replica)), "dirreq");
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
                 }
 
                 @Override
-                public void disconnected(TorStream s) { synchronized (onion) { onion.notify(); } }
+                public void disconnected(TorStream s) {
+                    synchronized (onion) {
+                        onion.notify();
+                    }
+                }
 
                 @Override
-                public void failure(TorStream s) { synchronized (onion) { onion.notify(); } }
+                public void failure(TorStream s) {
+                    synchronized (onion) {
+                        onion.notify();
+                    }
+                }
             });
 
             // wait for notification from the above listener that data is here! (that remote side ended connection - data could be blank
@@ -135,7 +144,7 @@ public class HiddenService {
             String data = IOUtils.toString(st.getInputStream());
 
             // HTTP success code
-            if(data.length()<1 || !data.split(" ")[1].equals("200")) {
+            if (data.length() < 1 || !data.split(" ")[1].equals("200")) {
                 continue;
             }
 
@@ -149,7 +158,7 @@ public class HiddenService {
 
     public static TorCircuit sendIntroduce(TorSocket sock, String onion, TorCircuit rendz) throws IOException {
         System.out.println("Fetching Hidden Service Descriptor");
-        String hsdescTxt = fetchHSDescriptor(sock,onion);
+        String hsdescTxt = fetchHSDescriptor(sock, onion);
         OnionRouter rendzOR = rendz.getLastHop().router;
 
 
@@ -168,7 +177,7 @@ public class HiddenService {
         OnionRouter ip0or = Consensus.getConsensus().routers.get(ip0);
         byte[] serviceKey = Base64.decode(intros.getArrayItem("service-key")[introPointNum]);
         byte skHash[] = TorCrypto.getSHA1().digest(serviceKey);
-        assert(skHash.length==20);
+        assert (skHash.length == 20);
         System.out.println(ip0or);
 
         System.out.println("Creating introduction circuit");
@@ -182,15 +191,15 @@ public class HiddenService {
 
         // inner handshake
         ByteBuffer handshake = ByteBuffer.allocate(1024);
-        handshake.put((byte)2); //ver
+        handshake.put((byte) 2); //ver
         handshake.put(rendzOR.ip.getAddress());  // rendz IP addr
-        handshake.putShort((short)rendzOR.orport);
+        handshake.putShort((short) rendzOR.orport);
         try {
             handshake.put(new Hex().decode(rendzOR.identityhash.getBytes()));
         } catch (DecoderException e) {
             e.printStackTrace();
         }
-        handshake.putShort((short)rendzOR.pubKeyraw.length);  // rendz key len
+        handshake.putShort((short) rendzOR.pubKeyraw.length);  // rendz key len
         handshake.put(rendzOR.pubKeyraw); // rendz key
         handshake.put(rendz.rendezvousCookie);  //rend cookie
 
@@ -207,7 +216,7 @@ public class HiddenService {
         handshake.flip();
 
         // convert to byte array
-        byte handshakeBytes [] = new byte[handshake.remaining()];
+        byte handshakeBytes[] = new byte[handshake.remaining()];
         handshake.get(handshakeBytes);
 
         // encrypt handshake
@@ -218,7 +227,7 @@ public class HiddenService {
         byte introcell[] = new byte[buf.remaining()];
         buf.get(introcell);
 
-        ipcirc.send(introcell, TorCircuit.RELAY_COMMAND_INTRODUCE1, false, (short)0);
+        ipcirc.send(introcell, TorCircuit.RELAY_COMMAND_INTRODUCE1, false, (short) 0);
         System.out.println("Waiting for introduce acknowledgement");
         ipcirc.waitForState(TorCircuit.STATES.INTRODUCED, false);
 

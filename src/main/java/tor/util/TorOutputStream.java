@@ -18,7 +18,7 @@ public class TorOutputStream extends OutputStream {
 
     @Override
     public void write(int i) throws IOException {
-        hostStream.send(new byte[] {(byte)i});
+        hostStream.send(new byte[]{(byte) i});
     }
 
     @Override
@@ -28,7 +28,7 @@ public class TorOutputStream extends OutputStream {
 
     @Override
     public void write(byte[] b, int off, int len) throws IOException {
-        hostStream.send(Arrays.copyOfRange(b, off, off+len));
+        hostStream.send(Arrays.copyOfRange(b, off, off + len));
     }
 
 

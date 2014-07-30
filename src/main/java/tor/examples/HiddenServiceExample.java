@@ -26,7 +26,7 @@ import java.io.InputStreamReader;
 
 public class HiddenServiceExample {
 
-    public static void main(String[] args) throws IOException  {
+    public static void main(String[] args) throws IOException {
         Consensus con = Consensus.getConsensus();
         TorSocket sock = new TorSocket(con.getRouterByName("turtles"));
 
@@ -43,16 +43,15 @@ public class HiddenServiceExample {
         // Connect to hidden service on port 80 and download a page
         TorStream hiddenServiceStream = rendz.createStream("", 80, null);
         hiddenServiceStream.waitForState(TorStream.STATES.READY);
-        hiddenServiceStream.sendHTTPGETRequest("/", ONION+".onion");
+        hiddenServiceStream.sendHTTPGETRequest("/", ONION + ".onion");
 
         System.out.println("HS - fetching index.html...");
 
         BufferedReader rdr = new BufferedReader(new InputStreamReader(hiddenServiceStream.getInputStream()));
 
         String line;
-        while ((line=rdr.readLine())!=null)
+        while ((line = rdr.readLine()) != null)
             System.out.println(line);
-
 
 
     }

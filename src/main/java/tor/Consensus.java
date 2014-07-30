@@ -47,14 +47,14 @@ public class Consensus {
     /**
      * A map containing the parsed consensus (String is identity as a hex string)
      */
-	public TreeMap<String, OnionRouter> routers = new TreeMap<>();
+    public TreeMap<String, OnionRouter> routers = new TreeMap<>();
 
     /**
      * Date that the consensus is valid until - it's your responsibility to refetch this if you need to.
      */
     Date consensusValidUntil = null;
 
-    String authorities[] = {    "moria1 orport=9101 v3ident=D586D18309DED4CD6D57C18FDB97EFA96D330566 128.31.0.39:9131 9695 DFC3 5FFE B861 329B 9F1A B04C 4639 7020 CE31",
+    String authorities[] = {"moria1 orport=9101 v3ident=D586D18309DED4CD6D57C18FDB97EFA96D330566 128.31.0.39:9131 9695 DFC3 5FFE B861 329B 9F1A B04C 4639 7020 CE31",
             "tor26 orport=443 v3ident=14C131DFC5C6F93646BE72FA1401C02A8DF2E8B4 86.59.21.38:80 847B 1F85 0344 D787 6491 A548 92F9 0493 4E4E B85D",
             "dizum orport=443 v3ident=E8A9C45EDE6D711294FADF8E7951F4DE6CA56B58 194.109.206.212:80 7EA6 EAD6 FD83 083C 538F 4403 8BBF A077 587D D755",
             "Tonga orport=443 bridge 82.94.251.203:80 4A0C CD2D DC79 9508 3D73 F5D6 6710 0C8A 5831 F16D",
@@ -71,21 +71,26 @@ public class Consensus {
     }
 
 
-	public Consensus() throws RuntimeException {
-            fetchConsensus(false);
+    /**
+     * Private constructor to stop instantiation outside of this class.
+     * Call getConsensus() if you want a Consensus object.
+     *
+     * @throws RuntimeException
+     */
+    private Consensus() {
     }
 
-    /***
+    /**
      * Try random directories until we get a successful dir stream, falling back to the pre-configured authorities after MAX_TRIES,
      * or if we don't have an existing consensus
-     *
+     * <p/>
      * If you're having speed issues, try adding "Fast" to the lists of flags below.
      *
      * @param path Desired dir path
      * @return InputStream for reading
      * @throws RuntimeException when it fails to download path after MAX_TRIES tries
      */
-    public InputStream getDirectoryStream(String path) throws RuntimeException {
+    public InputStream getDirectoryStream(String path) {
         String directoryType = "directory cache";
 
         // Avoid recursion by checking for an existing consensus before calling getRandomORWithFlag()
@@ -135,8 +140,8 @@ public class Consensus {
             try {
                 return connectToDirectoryStream(ipp[0], ipp[1], path);
             } catch (IOException e) {
-               System.out.println("Failed to get " + path + " from " + directoryType + " " + sp[0]);
-               continue;
+                System.out.println("Failed to get " + path + " from " + directoryType + " " + sp[0]);
+                continue;
             }
         }
 
@@ -148,7 +153,7 @@ public class Consensus {
     }
 
     private InputStream connectToDirectoryStream(String address, String port, String path) throws IOException {
-        URL url = new URL("http://"+address+":"+port+path);
+        URL url = new URL("http://" + address + ":" + port + path);
 
         // try the compressed version first, and transparently inflate it
         if (!path.endsWith(".z")) {
@@ -169,22 +174,25 @@ public class Consensus {
     }
 
     private boolean fetchConsensus(boolean forceDownload) {
+        routers = new TreeMap<>(); // erase old one
+
         try {
             File cachedConsensus = new File("cached-consensus");
-            SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss zzz") ;
-            BufferedReader in = null; // used to read consensus
+            SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss zzz");
+            BufferedReader consensusReader = null; // used to read consensus
             PrintWriter cachedConsensusWriter = null;
 
-            if(!forceDownload && cachedConsensus.exists() && cachedConsensus.canRead()) {
+            // examine cached consensus and assess whether still valid.
+            if (!forceDownload && cachedConsensus.exists() && cachedConsensus.canRead()) {
                 BufferedReader rdr = new BufferedReader(new FileReader(cachedConsensus));
                 String ln;
-                while((ln = rdr.readLine()) != null) {
-                    if(ln.startsWith("valid-until")) {
+                while ((ln = rdr.readLine()) != null) {
+                    if (ln.startsWith("valid-until")) {
                         int idx = ln.indexOf(" ");
-                        Date valid = df.parse(ln.substring(idx+1)+" GMT");
-                        if(valid.after(new Date())) { // saved consensus still valid
-                            System.out.println("Cached consensus exists in current directory - still valid so using.");
-                            in = rdr;
+                        Date valid = df.parse(ln.substring(idx + 1) + " GMT");
+                        if (valid.after(new Date())) { // saved consensus still valid
+                            System.out.println("cached-consensus exists in current directory - still valid so using. Expires: " + valid);
+                            consensusReader = rdr;
                         }
                         consensusValidUntil = valid;
                         break;
@@ -192,23 +200,23 @@ public class Consensus {
                 }
             }
 
-            if(in == null) { // if not using cached-consensus
-                System.out.println("No valid cached consensus so fetching.");
+            if (consensusReader == null) { // if not using cached-consensus
+                System.out.println("No valid cached consensus - fetching.");
                 InputStream conStream = getDirectoryStream("/tor/status-vote/current/consensus.z");
-                in = new BufferedReader(new InputStreamReader(new InflaterInputStream(conStream)));
-                if(new File(".").canWrite()) // can write to current directory?
+                consensusReader = new BufferedReader(new InputStreamReader(new InflaterInputStream(conStream)));
+                if (new File(".").canWrite()) // can write to current directory?
                     cachedConsensusWriter = new PrintWriter(cachedConsensus);
             }
 
             String ln = null;
             OnionRouter cur = null;
-            while ((ln = in.readLine()) != null) {
-                if(cachedConsensusWriter!=null) // if getting new consensus then save to disk!
+            while ((ln = consensusReader.readLine()) != null) {
+                if (cachedConsensusWriter != null) // if getting new consensus then save to disk!
                     cachedConsensusWriter.println(ln);
 
-                if(ln.startsWith("valid-until")) {
+                if (ln.startsWith("valid-until")) {
                     int idx = ln.indexOf(" ");
-                    consensusValidUntil = df.parse(ln.substring(idx+1)+" GMT");
+                    consensusValidUntil = df.parse(ln.substring(idx + 1) + " GMT");
                 }
 
                 if (ln.startsWith("r")) {
@@ -248,109 +256,79 @@ public class Consensus {
 
     private static Consensus consensus = null;
 
-    /***
+    /**
      * Return a consensus, populating it if needed
      *
      * @return populated Consensus
      */
     public static Consensus getConsensus() throws RuntimeException {
-        // Default: don't retrieve an updated consensus, and don't return a new consensus object
-        return getConsensus(false, false);
+        return getConsensus(false);
     }
 
-    /***
+    /**
      * Return an updated, new consensus, leaving existing consensus references as-is;
      * or return the existing consensus object with existing data
      *
-     * @param retrieveUpdatedConsensus return a new, updated consensus
+     * @param forceNewConsensus whether to refetch a few consensus instead of using cached one
      * @return populated Consensus
      */
-    public static Consensus getConsensus(Boolean retrieveUpdatedConsensus) throws RuntimeException {
-        return getConsensus(retrieveUpdatedConsensus, retrieveUpdatedConsensus);
-    }
-
-    /***
-     * Return an updated, new consensus, leaving existing consensus references as-is;
-     * or return the existing consensus object with existing data
-     *
-     * @param retrieveUpdatedConsensus update the consensus before returning it
-     * @param returnNewConsensus return a new consensus object, rather than the existing one.
-     *                           returnNewConsensus implies retrieveUpdatedConsensus.
-     * @return populated Consensus
-     */
-    public static Consensus getConsensus(Boolean retrieveUpdatedConsensus, Boolean returnNewConsensus) throws RuntimeException {
-        // If returnNewConsensus is false, we call fetchConsensus() on the current consensus object (if it exists)
-        // This updates the data in existing consensus references (which could cause unexpected results)
-        if (consensus == null || retrieveUpdatedConsensus || returnNewConsensus) {
-            try {
-                if (consensus == null || returnNewConsensus) {
-                    consensus = new Consensus();
-                } else {
-                    Boolean updateSucceeded = consensus.fetchConsensus(false);
-                    if (!updateSucceeded) {
-                        // Is it better to fail to update, or fail to keep the same consensus object?
-                        // We update, even if it means creating a new object
-                        System.out.println("getConsensus: fetchConsensus failed, returning new Consensus object");
-                        consensus = new Consensus();
-                    }
-                }
-            } catch (RuntimeException e) {
-                // Should we add "failed to get consensus" to this exception?
-                throw e;
-            }
+    public static Consensus getConsensus(boolean forceNewConsensus) throws RuntimeException {
+        if (consensus == null || forceNewConsensus) {
+            consensus = new Consensus();
+            consensus.fetchConsensus(forceNewConsensus);
         }
         return consensus;
     }
 
     public OnionRouter getRouterByName(String nm) {
-		for (OnionRouter r : routers.values())
-			if (r.name.equals(nm))
-				return r;
-		throw new RuntimeException("unknown router: "+nm);
-	}
+        for (OnionRouter r : routers.values())
+            if (r.name.equals(nm))
+                return r;
+        throw new RuntimeException("unknown router: " + nm);
+    }
 
-	public OnionRouter getRouterByIpPort(String addr, int port) {
-		for (OnionRouter r : routers.values())
-			if (r.ip.getHostAddress().equals(addr) && r.orport == port)
-				return r;
-		throw new RuntimeException("unknown router");
-	}
+    public OnionRouter getRouterByIpPort(String addr, int port) {
+        for (OnionRouter r : routers.values())
+            if (r.ip.getHostAddress().equals(addr) && r.orport == port)
+                return r;
+        throw new RuntimeException("unknown router");
+    }
 
-    /***
+    /**
      * Return the routers with the supplied flag(s), excluding bad exits.
      * See https://consensus-health.torproject.org for a list of known flags.
      *
      * @param flag the desired flag(s) (case-sensitive). Multiple flags should be supplied in a comma-separated list.
      * @return a TreeMap of each router with the specified flag(s), indexed by identityhash
      */
-    public TreeMap<String,OnionRouter> getORsWithFlag(String flag) {
+    public TreeMap<String, OnionRouter> getORsWithFlag(String flag) {
         return getORsWithFlag(flag.split(","), true);
     }
 
-    /***
+    /**
      * Return the routers with all of the supplied flags, excluding bad exits
      * See https://consensus-health.torproject.org for a list of known flags.
      *
      * @param flags the desired flags (case-sensitive)
      * @return a TreeMap of each router with the specified flags, indexed by identityhash
      */
-    public TreeMap<String,OnionRouter> getORsWithFlag(String[] flags) {
+    public TreeMap<String, OnionRouter> getORsWithFlag(String[] flags) {
         return getORsWithFlag(flags, true);
     }
 
-    /***
+    /**
      * Return the routers with all of the supplied flags, optionally excluding bad exits.
      * See https://consensus-health.torproject.org for a list of known flags.
      * Because OnionRouter.acceptsIPv4ExitPort is an expensive operation, we perform it in the getRandom*() functions.
      *
-     * @param flags the desired flags (case-sensitive)
+     * @param flags           the desired flags (case-sensitive)
      * @param excludeBadExits exclude routers with the BadExit flags (these are considered unreliable for some purposes)
      * @return a TreeMap of each router with the specified flags, indexed by identityhash
      */
-    public TreeMap<String,OnionRouter> getORsWithFlag(String[] flags, Boolean excludeBadExits) {
-        TreeMap<String,OnionRouter> map = new TreeMap<>();
+    public TreeMap<String, OnionRouter> getORsWithFlag(String[] flags, boolean excludeBadExits) {
+        TreeMap<String, OnionRouter> map = new TreeMap<>();
         for (OnionRouter r : routers.values()) {
-            if(r.flags.containsAll(Arrays.asList(flags))
+            if (r.flags.containsAll(Arrays.asList(flags))
                     // either we're including (not excluding) bad exits, or we filter out routers with the bad exit flag
                     && (!excludeBadExits || !r.flags.contains("BadExit"))) {
                 map.put(r.identityhash, r);
@@ -360,7 +338,7 @@ public class Consensus {
     }
 
 
-    /***
+    /**
      * Return a (cryptographically) random router with the supplied flag(s), excluding bad exits.
      * See https://consensus-health.torproject.org for a list of known flags.
      *
@@ -371,7 +349,7 @@ public class Consensus {
         return getRandomORWithFlag(flag.split(","), 0, true);
     }
 
-    /***
+    /**
      * Return a (cryptographically) random router with all of the supplied flags, excluding bad exits.
      * See https://consensus-health.torproject.org for a list of known flags.
      *
@@ -382,11 +360,11 @@ public class Consensus {
         return getRandomORWithFlag(flags, 0, true);
     }
 
-    /***
+    /**
      * Return the routers with all of the supplied flags and the specified exitPort, excluding bad exits.
      * See https://consensus-health.torproject.org for a list of known flags.
      *
-     * @param flags the desired flags (case-sensitive)
+     * @param flags    the desired flags (case-sensitive)
      * @param exitPort the desired exit port in the router's exit policy (or 0 to ignore exit policies)
      * @return a random router with the specified flags
      */
@@ -394,12 +372,12 @@ public class Consensus {
         return getRandomORWithFlag(flags, exitPort, true);
     }
 
-    /***
+    /**
      * Return the routers with all of the supplied flags and the specified exitPort, optonally excluding bad exits.
      * See https://consensus-health.torproject.org for a list of known flags.
      *
-     * @param flags the desired flags (case-sensitive)
-     * @param exitPort the desired exit port in the router's exit policy (or 0 to ignore exit policies)
+     * @param flags           the desired flags (case-sensitive)
+     * @param exitPort        the desired exit port in the router's exit policy (or 0 to ignore exit policies)
      * @param excludeBadExits exclude routers with the BadExit flags (these are considered unreliable for some purposes)
      * @return a random router with the specified flags
      */
@@ -426,6 +404,6 @@ public class Consensus {
     }
 
     public String getRouterDescriptor(String hash) throws IOException {
-        return IOUtils.toString(getDirectoryStream("/tor/server/fp/"+hash));
+        return IOUtils.toString(getDirectoryStream("/tor/server/fp/" + hash));
     }
 }

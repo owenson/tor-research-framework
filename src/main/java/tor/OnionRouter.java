@@ -29,11 +29,11 @@ import java.util.HashSet;
 
 public class OnionRouter {
     String name;
-	InetAddress ip;
-	int orport;
-	int dirport;
-	PublicKey pubKey = null;
-	public String identityhash;
+    InetAddress ip;
+    int orport;
+    int dirport;
+    PublicKey pubKey = null;
+    public String identityhash;
     public HashSet<String> flags = new HashSet<>();
     public byte[] pubKeyraw;
     public String consensusIPv4ExitPortSummary = null;
@@ -76,11 +76,11 @@ public class OnionRouter {
                 try {
                     TorDocumentParser rdr = new TorDocumentParser(Consensus.getConsensus().getRouterDescriptor(identityhash));
                     descriptorIPv4ExitPolicy = rdr.getArrayItem(TorDocumentParser.IPv4PolicyKey);
-                } catch(IOException e) {
+                } catch (IOException e) {
                     System.out.println("acceptsIPv4ExitPort: failed to retrieve exit policy for: " + name
                             + ", assuming reject. Parsing router descriptor failed with IOException: " + e.toString());
                     return false;
-                } catch(RuntimeException e) {
+                } catch (RuntimeException e) {
                     System.out.println("acceptsIPv4ExitPort: failed to retrieve exit policy for: " + name
                             + ", assuming reject. Retrieving consensus failed with RuntimeException: " + e.toString());
                     return false;
