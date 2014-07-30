@@ -22,15 +22,15 @@ import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.io.IOUtils;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.net.InetAddress;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.UnknownHostException;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.TreeMap;
 import java.util.zip.InflaterInputStream;
 
@@ -44,11 +44,15 @@ public class Consensus {
      */
     boolean useOnlyAuthorities = false;
 
-
     /**
      * A map containing the parsed consensus (String is identity as a hex string)
      */
 	public TreeMap<String, OnionRouter> routers = new TreeMap<>();
+
+    /**
+     * Date that the consensus is valid until - it's your responsibility to refetch this if you need to.
+     */
+    Date consensusValidUntil = null;
 
     String authorities[] = {    "moria1 orport=9101 v3ident=D586D18309DED4CD6D57C18FDB97EFA96D330566 128.31.0.39:9131 9695 DFC3 5FFE B861 329B 9F1A B04C 4639 7020 CE31",
             "tor26 orport=443 v3ident=14C131DFC5C6F93646BE72FA1401C02A8DF2E8B4 86.59.21.38:80 847B 1F85 0344 D787 6491 A548 92F9 0493 4E4E B85D",
@@ -68,7 +72,7 @@ public class Consensus {
 
 
 	public Consensus() throws RuntimeException {
-            fetchConsensus();
+            fetchConsensus(false);
     }
 
     /***
@@ -164,14 +168,49 @@ public class Consensus {
         return in;
     }
 
-    private boolean fetchConsensus() {
+    private boolean fetchConsensus(boolean forceDownload) {
         try {
-            InputStream connStream = getDirectoryStream("/tor/status-vote/current/consensus.z");
+            File cachedConsensus = new File("cached-consensus");
+            SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss zzz") ;
+            BufferedReader in = null; // used to read consensus
+            PrintWriter cachedConsensusWriter = null;
 
-            BufferedReader in = new BufferedReader(new InputStreamReader(new InflaterInputStream(connStream)));
+            if(!forceDownload && cachedConsensus.exists() && cachedConsensus.canRead()) {
+                BufferedReader rdr = new BufferedReader(new FileReader(cachedConsensus));
+                String ln;
+                while((ln = rdr.readLine()) != null) {
+                    if(ln.startsWith("valid-until")) {
+                        int idx = ln.indexOf(" ");
+                        Date valid = df.parse(ln.substring(idx+1)+" GMT");
+                        if(valid.after(new Date())) { // saved consensus still valid
+                            System.out.println("Cached consensus exists in current directory - still valid so using.");
+                            in = rdr;
+                        }
+                        consensusValidUntil = valid;
+                        break;
+                    }
+                }
+            }
+
+            if(in == null) { // if not using cached-consensus
+                System.out.println("No valid cached consensus so fetching.");
+                InputStream conStream = getDirectoryStream("/tor/status-vote/current/consensus.z");
+                in = new BufferedReader(new InputStreamReader(new InflaterInputStream(conStream)));
+                if(new File(".").canWrite()) // can write to current directory?
+                    cachedConsensusWriter = new PrintWriter(cachedConsensus);
+            }
+
             String ln = null;
             OnionRouter cur = null;
-            while ((ln = in.readLine()) != null)
+            while ((ln = in.readLine()) != null) {
+                if(cachedConsensusWriter!=null) // if getting new consensus then save to disk!
+                    cachedConsensusWriter.println(ln);
+
+                if(ln.startsWith("valid-until")) {
+                    int idx = ln.indexOf(" ");
+                    consensusValidUntil = df.parse(ln.substring(idx+1)+" GMT");
+                }
+
                 if (ln.startsWith("r")) {
                     String dat[] = ln.split(" ");
                     if (dat.length < 8)
@@ -190,15 +229,20 @@ public class Consensus {
 
                     // tolerate extra junk at the end of the line
                     if (lineSplit.length >= 3)
-                      cur.consensusIPv4ExitPortSummary = lineSplit[1] + " " + lineSplit[2];
+                        cur.consensusIPv4ExitPortSummary = lineSplit[1] + " " + lineSplit[2];
                 }
+            }
         } catch (MalformedURLException e) {
             return false;
         } catch (UnknownHostException e) {
             return false;
         } catch (IOException e) {
             return false;
+        } catch (ParseException e) {
+            e.printStackTrace();
+            return false;
         }
+
         return true;
     }
 
@@ -242,7 +286,7 @@ public class Consensus {
                 if (consensus == null || returnNewConsensus) {
                     consensus = new Consensus();
                 } else {
-                    Boolean updateSucceeded = consensus.fetchConsensus();
+                    Boolean updateSucceeded = consensus.fetchConsensus(false);
                     if (!updateSucceeded) {
                         // Is it better to fail to update, or fail to keep the same consensus object?
                         // We update, even if it means creating a new object
