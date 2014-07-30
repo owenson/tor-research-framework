@@ -69,15 +69,15 @@ public class TorCircuit {
     boolean blocking = false;
 	
 	// this circuit hop
-	private LinkedList<OnionRouter> circuitToBuild = new LinkedList<OnionRouter>();
-	private ArrayList<TorHop> hops = new ArrayList<TorHop>();
+	private LinkedList<OnionRouter> circuitToBuild = new LinkedList<>();
+	private ArrayList<TorHop> hops = new ArrayList<>();
 
     public enum STATES { NONE, CREATING, EXTENDING, READY, DESTROYED, RENDEZVOUS_WAIT, RENDEZVOUS_ESTABLISHED, RENDEZVOUS_COMPLETE, INTRODUCED }
 	public STATES state = STATES.NONE;
     private Object stateNotify = new Object();
 
 	// list of active streams for this circuit
-	TreeMap<Integer, TorStream> streams = new TreeMap<Integer, TorStream>();
+	TreeMap<Integer, TorStream> streams = new TreeMap<>();
 	// streams with packets to send
 	/**
 	 * 
@@ -213,7 +213,7 @@ public class TorCircuit {
 			
 			byte digest[] = md.digest();
 			
-			byte [] fnl_final = new byte[509];
+			//byte [] fnl_final = new byte[509];
 			System.arraycopy(digest, 0, fnl, 5, 4);
 			
 			return fnl;
@@ -244,9 +244,9 @@ public class TorCircuit {
 	 */
     // TODO: should check digest in this function too - otherwise might miss packets with 1/65535 probability.
 	private byte[] decrypt(byte []data) {
-		for (int i = 0; i<hops.size(); i++) {
-			data = hops.get(i).decrypt(data);
-		}
+        for (TorHop hop : hops) {
+            data = hop.decrypt(data);
+        }
 		return data;
 	}
 
@@ -266,7 +266,7 @@ public class TorCircuit {
 	 * Sends an extend cell to extend the circuit to specified hop
 	 * 
 	 * @param nextHop Hop to extend to
-	 * @throws  
+	 * @throws  IOException
 	 */
 	public void extend(OnionRouter nextHop) throws IOException  {
         if(state == STATES.DESTROYED)
@@ -327,7 +327,7 @@ public class TorCircuit {
 		int stid = streamId_counter++;
 		send(null, RELAY_BEGIN_DIR, false, (short) stid);
 		TorStream st = new TorStream(stid, this, list);
-		streams.put(new Integer(stid), st);
+		streams.put(stid, st);
 		return st;
 	}
 
@@ -353,7 +353,7 @@ public class TorCircuit {
         int stid = streamId_counter++;
         send(b, RELAY_BEGIN, false, (short) stid);
         TorStream st = new TorStream(stid, this, list);
-        streams.put(new Integer(stid), st);
+        streams.put(stid, st);
         return st;
     }
 	/**
@@ -583,8 +583,7 @@ public class TorCircuit {
 		else if (c.cmdId == Cell.DESTROY) {
 			System.out.println("Circuit destroyed "+circId);
             System.out.println("Reason: "+DESTROY_ERRORS[c.payload[0]]);
-            for (Iterator<TorStream> iterator = streams.values().iterator(); iterator.hasNext(); ) {
-                TorStream s = iterator.next();
+            for (TorStream s : streams.values()) {
                 s.notifyDisconnect();
             }
 			setState(STATES.DESTROYED);

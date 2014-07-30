@@ -176,7 +176,7 @@ public class SOCKSProxy {
         }
     }
 
-    static HashMap<SocketChannel,SocksClient> clients = new HashMap<SocketChannel,SocksClient>();
+    static HashMap<SocketChannel,SocksClient> clients = new HashMap<>();
 
     // utility function
     public SocksClient addClient(SocketChannel s, TorCircuit circ) {

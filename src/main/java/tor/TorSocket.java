@@ -36,7 +36,6 @@ import java.security.Security;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.TreeMap;
-import java.util.concurrent.LinkedBlockingQueue;
 
 public class TorSocket {
 
@@ -49,7 +48,7 @@ public class TorSocket {
 	OnionRouter firstHop; // e.g. hop connected to
 	
 	// circuits for this socket
-	TreeMap<Integer, TorCircuit> circuits = new TreeMap<Integer, TorCircuit>();
+	TreeMap<Integer, TorCircuit> circuits = new TreeMap<>();
     //LinkedBlockingQueue<Cell> sendQueue = new LinkedBlockingQueue<Cell>();
     enum STATES { INITIALISING, READY };
 
@@ -62,8 +61,7 @@ public class TorSocket {
 	 * @param circid Circuit ID
 	 * @param cmd Cell Command.  See Cell.*
 	 * @param payload Cell Payload
-	 * 
-	 * @return Success or failure
+	 *
 	 */
 	public void sendCell(int circid, int cmd, byte[] payload)
 			throws IOException {
@@ -100,7 +98,7 @@ public class TorSocket {
 	}
 */
     private byte[] blockingRead(int length) throws IOException {
-       byte buf[] = new byte[length];
+       //byte buf[] = new byte[length];
        return IOUtils.readFully(in, length, true);
 
 //       int off = 0;
@@ -195,7 +193,7 @@ public class TorSocket {
 		// TODO Auto-generated method stub
 		TorCircuit circ = new TorCircuit(this);
         circ.setBlocking(blocking);
-		circuits.put(new Integer(circ.circId), circ);
+		circuits.put(circ.circId, circ);
 		return circ;
 	}
 	
@@ -206,8 +204,7 @@ public class TorSocket {
 	/**
 	 * Main constructor. Connects and does connection setup.
 	 * 
-	 * @param host Hostname/IP string
-	 * @param port Port
+	 * @param fh OnionRouter for first hop (used for Hostname/IP string and Port)
 	 */
 	public TorSocket(OnionRouter fh) throws IOException  {
 

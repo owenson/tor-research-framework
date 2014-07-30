@@ -70,7 +70,7 @@ public class HiddenService {
         Object keys[] = routers.keySet().toArray();
         Object vals[] = routers.values().toArray();
 
-        ArrayList<OnionRouter> rts = new ArrayList<OnionRouter>();
+        ArrayList<OnionRouter> rts = new ArrayList<>();
 
         for (int replica = 0; replica < 2; replica++) {
             // Get nodes just to right of HS's descID in the DHT
@@ -82,7 +82,7 @@ public class HiddenService {
         }
 
         // return list containing hopefully six ORs.
-        return (OnionRouter[])rts.toArray(new OnionRouter[0]);
+        return rts.toArray(new OnionRouter[0]);
     }
 
     // blocking
@@ -140,7 +140,7 @@ public class HiddenService {
             }
 
             int dataIndex = data.indexOf("\r\n\r\n");
-            return new String(data.substring(dataIndex));
+            return data.substring(dataIndex);
         }
 
         System.out.println("NOT FOUND HS DESCRIPTOR!!!!!!!!!!!!!1*****************");

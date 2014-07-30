@@ -111,7 +111,7 @@ public Object[] toArray() {
 }
 
 @Override
-public <T> T[] toArray(T[] arg0) {
+public <U> U[] toArray(U[] arg0) {
 	// TODO Auto-generated method stub
 	return null;
 }

@@ -31,7 +31,7 @@ import java.util.TreeMap;
  * Created by gho on 25/07/14.
  */
 public class TorDocumentParser {
-    public TreeMap<String,String> map = new TreeMap<String,String>();
+    public TreeMap<String,String> map = new TreeMap<>();
 
     // prduces a map from a normal tor document, key/value pairs
     // parses block BEGIN-ENDS correctly
@@ -47,7 +47,7 @@ public class TorDocumentParser {
 
     public TreeMap<String,String> KeyReplacementMap() {
         if (keyReplacementMap == null) {
-            keyReplacementMap = new TreeMap<String,String>();
+            keyReplacementMap = new TreeMap<>();
             keyReplacementMap.put("accept", IPv4PolicyKey);
             keyReplacementMap.put("reject", IPv4PolicyKey);
         }
@@ -55,8 +55,8 @@ public class TorDocumentParser {
     }
 
     public TorDocumentParser(String doc) throws IOException {
-        String curKey = null;
-        String curVal = null;
+        //String curKey = null;
+        //String curVal = null;
         String lns [] = (String[])IOUtils.readLines(new StringReader(doc)).toArray(new String[0]);
 
         for (int i = 0; i < lns.length; i++) {

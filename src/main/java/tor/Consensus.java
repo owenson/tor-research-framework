@@ -32,16 +32,16 @@ import java.net.URL;
 import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.TreeMap;
-import java.util.regex.Pattern;
 import java.util.zip.InflaterInputStream;
 
 public class Consensus {
-	public final static String DIRSERV = "86.59.21.38";
+	// --Commented out by Inspection (30/07/2014 06:24):
+	// public final static String DIRSERV = "86.59.21.38";
 
     // The maximum number of connection tries to directory caches before falling back to authorities
     public final static int MAX_TRIES = 10;
 
-	public TreeMap<String, OnionRouter> routers = new TreeMap<String, OnionRouter>();
+	public TreeMap<String, OnionRouter> routers = new TreeMap<>();
     String authorities[] = {    "moria1 orport=9101 v3ident=D586D18309DED4CD6D57C18FDB97EFA96D330566 128.31.0.39:9131 9695 DFC3 5FFE B861 329B 9F1A B04C 4639 7020 CE31",
             "tor26 orport=443 v3ident=14C131DFC5C6F93646BE72FA1401C02A8DF2E8B4 86.59.21.38:80 847B 1F85 0344 D787 6491 A548 92F9 0493 4E4E B85D",
             "dizum orport=443 v3ident=E8A9C45EDE6D711294FADF8E7951F4DE6CA56B58 194.109.206.212:80 7EA6 EAD6 FD83 083C 538F 4403 8BBF A077 587D D755",
@@ -54,7 +54,7 @@ public class Consensus {
             "Faravahar orport=443 v3ident=EFCBE720AB3A82B99F9E953CD5BF50F7EEFC7B97 154.35.32.5:80 CF6D 0AAF B385 BE71 B8E1 11FC 5CFF 4B47 9237 33BC"
     };
 	
-	public Consensus() throws IOException {
+	public Consensus() throws RuntimeException {
             fetchConsensus();
     }
 
@@ -78,8 +78,9 @@ public class Consensus {
      * @param path Desired dir path
      * @param useDirectoryCaches use directory caches, if an existing consensus is available
      * @return InputStream for reading
+     * @throws RuntimeException when it fails to download path after MAX_TRIES tries
      */
-    public InputStream getDirectoryStream(String path, Boolean useDirectoryCaches) {
+    public InputStream getDirectoryStream(String path, Boolean useDirectoryCaches) throws RuntimeException {
         String directoryType = "directory cache";
 
         // Avoid recursion by checking for an existing consensus before calling getRandomORWithFlag()
@@ -100,10 +101,12 @@ public class Consensus {
                 // Typically, 80% of routers are running, and almost all are valid
                 OnionRouter dir = getRandomORWithFlag("V2Dir,Running,Valid");
 
-                System.out.println("Connecting to " + directoryType + ": " + dir.name);
+                System.out.println("Connecting to " + directoryType + " " + dir.name);
                 try {
                     return connectToDirectoryStream(dir.ip, dir.dirport, path);
                 } catch (IOException e) {
+                    System.out.println("Failed to get " + path + " from " + directoryType + " "
+                            + dir.ip + ":" + String.valueOf(dir.dirport));
                     continue;
                 }
             }
@@ -123,14 +126,16 @@ public class Consensus {
             String auth = authorities[i];
             String sp[] = auth.split(" ");
             String ipp[] = sp[3].split(":");
-            System.out.println("Connecting to " + directoryType + ": " + sp[0]);
+            System.out.println("Connecting to " + directoryType + " " + sp[0]);
             try {
                 return connectToDirectoryStream(ipp[0], ipp[1], path);
             } catch (IOException e) {
+               System.out.println("Failed to get " + path + " from " + directoryType + " " + sp[0]);
                continue;
             }
         }
-        return null;
+
+        throw new RuntimeException("Can't get " + path + " after " + String.valueOf(MAX_TRIES) + " tries.");
     }
 
     private InputStream connectToDirectoryStream(InetAddress address, int port, String path) throws IOException {
@@ -183,7 +188,7 @@ public class Consensus {
      *
      * @return populated Consensus
      */
-    public static Consensus getConsensus() {
+    public static Consensus getConsensus() throws RuntimeException {
         // Default: don't retrieve an updated consensus, and don't return a new consensus object
         return getConsensus(false, false);
     }
@@ -195,7 +200,7 @@ public class Consensus {
      * @param retrieveUpdatedConsensus return a new, updated consensus
      * @return populated Consensus
      */
-    public static Consensus getConsensus(Boolean retrieveUpdatedConsensus) {
+    public static Consensus getConsensus(Boolean retrieveUpdatedConsensus) throws RuntimeException {
         return getConsensus(retrieveUpdatedConsensus, retrieveUpdatedConsensus);
     }
 
@@ -208,7 +213,7 @@ public class Consensus {
      *                           returnNewConsensus implies retrieveUpdatedConsensus.
      * @return populated Consensus
      */
-    public static Consensus getConsensus(Boolean retrieveUpdatedConsensus, Boolean returnNewConsensus) {
+    public static Consensus getConsensus(Boolean retrieveUpdatedConsensus, Boolean returnNewConsensus) throws RuntimeException {
         // If returnNewConsensus is false, we call fetchConsensus() on the current consensus object (if it exists)
         // This updates the data in existing consensus references (which could cause unexpected results)
         if (consensus == null || retrieveUpdatedConsensus || returnNewConsensus) {
@@ -224,8 +229,9 @@ public class Consensus {
                         consensus = new Consensus();
                     }
                 }
-            } catch (IOException e) {
-                throw new RuntimeException("Can't get consensus: " + e);
+            } catch (RuntimeException e) {
+                // Should we add "failed to get consensus" to this exception?
+                throw e;
             }
         }
         return consensus;
@@ -277,7 +283,7 @@ public class Consensus {
      * @return a TreeMap of each router with the specified flags, indexed by identityhash
      */
     public TreeMap<String,OnionRouter> getORsWithFlag(String[] flags, Boolean excludeBadExits) {
-        TreeMap<String,OnionRouter> map = new TreeMap<String,OnionRouter>();
+        TreeMap<String,OnionRouter> map = new TreeMap<>();
         for (OnionRouter r : routers.values()) {
             if(r.flags.containsAll(Arrays.asList(flags))
                     // either we're including (not excluding) bad exits, or we filter out routers with the bad exit flag
@@ -334,7 +340,7 @@ public class Consensus {
      */
     public OnionRouter getRandomORWithFlag(String[] flags, int exitPort, Boolean excludeBadExits) {
         TreeMap<String, OnionRouter> map = getORsWithFlag(flags, excludeBadExits);
-        OnionRouter ors[] = map.values().toArray(new OnionRouter[0]);
+        OnionRouter ors[] = map.values().toArray(new OnionRouter[map.size()]);
 
         int idx = TorCrypto.rnd.nextInt(ors.length);
 

@@ -125,7 +125,7 @@ public class SOCKSProxyNonTor {
         }
     }
 
-    static ArrayList <SocksClient> clients = new ArrayList<SocksClient>();
+    static ArrayList <SocksClient> clients = new ArrayList<>();
 
     // utility function
     public SocksClient addClient(SocketChannel s) {
