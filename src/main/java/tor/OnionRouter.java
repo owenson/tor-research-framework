@@ -29,11 +29,19 @@ import java.util.HashSet;
 
 public class OnionRouter {
     String name;
+<<<<<<< HEAD
     InetAddress ip;
     int orport;
     int dirport;
     PublicKey pubKey = null;
     public String identityhash;
+=======
+	InetAddress ip;
+	int orport;
+	int dirport;
+	PublicKey pubKey = null;
+	public String identityhash;
+>>>>>>> d9afd0dcb89e770f34465680c2eebbe3ac0aa54a
     public HashSet<String> flags = new HashSet<>();
     public byte[] pubKeyraw;
     public String consensusIPv4ExitPortSummary = null;
@@ -68,7 +76,29 @@ public class OnionRouter {
         else if (exitPort < 0 || exitPort > 65535)
             return true;
 
+<<<<<<< HEAD
         if (parsedIPv4ExitPortList == null) {
+=======
+<<<<<<< HEAD
+        if (IPv4ExitPolicy == null) {
+            try {
+                // Do we need to download this separately, or does it come as part of the consensus?
+                TorDocumentParser rdr = new TorDocumentParser(Consensus.getConsensus().getRouterDescriptor(identityhash));
+                IPv4ExitPolicy = rdr.getArrayItem(TorDocumentParser.IPv4PolicyKey);
+            } catch(IOException e) {
+                System.out.println("acceptsIPv4ExitPort: failed to retrieve exit policy for: " + name
+                        + ", assuming reject. Parsing router descriptor failed with IOException: " + e.toString());
+                return false;
+            } catch(RuntimeException e) {
+                System.out.println("acceptsIPv4ExitPort: failed to retrieve exit policy for: " + name
+                        + ", assuming reject. Retrieving consensus failed with RuntimeException: " + e.toString());
+                return false;
+            }
+        }
+=======
+        if (parsedIPv4ExitPortList == null) {
+>>>>>>> d493d464e63ffc6acc2d280445119fcf5d6db270
+>>>>>>> d9afd0dcb89e770f34465680c2eebbe3ac0aa54a
 
             // if we don't have the p line from the consensus, download the entire router descriptor
             if (consensusIPv4ExitPortSummary == null && descriptorIPv4ExitPolicy == null) {
