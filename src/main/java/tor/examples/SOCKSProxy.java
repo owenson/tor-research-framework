@@ -37,7 +37,7 @@ import java.util.Set;
  * Created by gho on 27/06/14.
  */
 public class SOCKSProxy {
-    class SocksClient implements TorStream.TorStreamListener{
+    class SocksClient implements TorStream.TorStreamListener {
         SocketChannel client;
         boolean connected;
         long lastData = 0;
@@ -54,9 +54,9 @@ public class SOCKSProxy {
         }
 
         public void newClientData(Selector selector, SelectionKey sk) throws IOException {
-            if(!connected) {
+            if (!connected) {
                 ByteBuffer inbuf = ByteBuffer.allocate(512);
-                if(client.read(inbuf)<1)
+                if (client.read(inbuf) < 1)
                     return;
                 inbuf.flip();
                 //inbufinbufinbufinb.get() final DataInputStream in = new DataInputStream(Channels.newInputStream(client));
@@ -99,7 +99,7 @@ public class SOCKSProxy {
             } else {
                 ByteBuffer buf = ByteBuffer.allocate(4096);
                 int nlen = 0;
-                if((nlen = client.read(buf)) == -1)
+                if ((nlen = client.read(buf)) == -1)
                     throw new IOException("disconnected");
                 lastData = System.currentTimeMillis();
                 buf.flip();
@@ -112,7 +112,7 @@ public class SOCKSProxy {
         @Override
         public void dataArrived(TorStream s) {
             try {
-                if(!client.isConnected())
+                if (!client.isConnected())
                     removeClient(this);
 
                 int availBytes = s.getInputStream().available();
@@ -135,7 +135,7 @@ public class SOCKSProxy {
         @Override
         public void connected(TorStream s) {
             ByteBuffer out = ByteBuffer.allocate(20);
-            out.put((byte)0);
+            out.put((byte) 0);
             out.put((byte) (0x5a));
             out.putShort((short) port);
             out.put(remoteAddr.getAddress());
@@ -176,7 +176,7 @@ public class SOCKSProxy {
         }
     }
 
-    static HashMap<SocketChannel,SocksClient> clients = new HashMap<>();
+    static HashMap<SocketChannel, SocksClient> clients = new HashMap<>();
 
     // utility function
     public SocksClient addClient(SocketChannel s, TorCircuit circ) {
@@ -187,7 +187,7 @@ public class SOCKSProxy {
             e.printStackTrace();
             return null;
         }
-        clients.put(s,cl);
+        clients.put(s, cl);
         return cl;
     }
 
@@ -198,6 +198,7 @@ public class SOCKSProxy {
     }
 
     long lastTimeoutCheck = 0;
+
     public SOCKSProxy() throws IOException {
         // connect through a guard
         OnionRouter guard = Consensus.getConsensus().getRouterByName("southsea0");
@@ -218,7 +219,7 @@ public class SOCKSProxy {
 
         int lastClients = clients.size();
         // select loop
-        while(true) {
+        while (true) {
             select.select(1000);
 
             Set keys = select.selectedKeys();
@@ -253,17 +254,17 @@ public class SOCKSProxy {
             }
 
             // client timeout check
-            if(System.currentTimeMillis() - lastTimeoutCheck > 15000) {
+            if (System.currentTimeMillis() - lastTimeoutCheck > 15000) {
                 lastTimeoutCheck = System.currentTimeMillis();
                 Collection<SocksClient> clientsTmp = clients.values();
-                for(SocksClient cl : clientsTmp) {
-                    if((System.currentTimeMillis() - cl.lastData) > 30000L) {
+                for (SocksClient cl : clientsTmp) {
+                    if ((System.currentTimeMillis() - cl.lastData) > 30000L) {
                         cl.stream.destroy();
                         cl.client.close();
                         clients.remove(cl);
                     }
                 }
-                if(clients.size() != lastClients) {
+                if (clients.size() != lastClients) {
                     System.out.println(clients.size());
                     lastClients = clients.size();
                 }

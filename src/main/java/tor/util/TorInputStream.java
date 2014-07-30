@@ -11,6 +11,7 @@ import java.io.InputStream;
 public class TorInputStream extends InputStream {
 
     TorStream hostStream;
+
     public TorInputStream(TorStream st) {
         hostStream = st;
     }
@@ -22,7 +23,7 @@ public class TorInputStream extends InputStream {
 
     @Override
     public long skip(long n) throws IOException {
-        return hostStream.recv(new byte[(int)n], true);
+        return hostStream.recv(new byte[(int) n], true);
     }
 
     @Override
@@ -42,7 +43,7 @@ public class TorInputStream extends InputStream {
     public int read(byte[] b, int off, int len) throws IOException {
         byte buf[] = new byte[len];
         int received = hostStream.recv(buf, true);
-        if(received==-1)
+        if (received == -1)
             return -1;
         System.arraycopy(buf, 0, b, off, received);
         return received;

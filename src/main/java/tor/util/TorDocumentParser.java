@@ -31,7 +31,7 @@ import java.util.TreeMap;
  * Created by gho on 25/07/14.
  */
 public class TorDocumentParser {
-    public TreeMap<String,String> map = new TreeMap<>();
+    public TreeMap<String, String> map = new TreeMap<>();
 
     // produces a map from a normal tor document, key/value pairs
     // parses block BEGIN-ENDS correctly
@@ -43,9 +43,9 @@ public class TorDocumentParser {
     // i.e. accept *:80|reject *:*
     public final static String IPv4PolicyKey = "ipv4-policy";
 
-    private static TreeMap<String,String> keyReplacementMap;
+    private static TreeMap<String, String> keyReplacementMap;
 
-    public TreeMap<String,String> KeyReplacementMap() {
+    public TreeMap<String, String> KeyReplacementMap() {
         if (keyReplacementMap == null) {
             keyReplacementMap = new TreeMap<>();
             keyReplacementMap.put("accept", IPv4PolicyKey);
@@ -57,32 +57,31 @@ public class TorDocumentParser {
     public TorDocumentParser(String doc) throws IOException {
         //String curKey = null;
         //String curVal = null;
-        String lns [] = (String[])IOUtils.readLines(new StringReader(doc)).toArray(new String[0]);
+        String lns[] = (String[]) IOUtils.readLines(new StringReader(doc)).toArray(new String[0]);
 
         for (int i = 0; i < lns.length; i++) {
             String ln = lns[i];
-            if(ln.equals(""))
+            if (ln.equals(""))
                 continue;
 
             String sp[] = ln.split(" ");
-            boolean nextBegin = lns.length> i+1 ? lns[i+1].contains("BEGIN"):false;
+            boolean nextBegin = lns.length > i + 1 ? lns[i + 1].contains("BEGIN") : false;
 
-            if(sp.length == 1 && nextBegin) { // single word and multiline
+            if (sp.length == 1 && nextBegin) { // single word and multiline
                 // see if next line contains begin
-                String key = sp[0], val="";
+                String key = sp[0], val = "";
 
-                i+=2;
-                for(; i<lns.length; i++) {
-                    if(lns[i].contains("END")) {
+                i += 2;
+                for (; i < lns.length; i++) {
+                    if (lns[i].contains("END")) {
                         break;
                     }
                     val += lns[i];
                 }
                 addItem(key, val);
-            } else if(sp.length == 1) { // single word but not multiline
+            } else if (sp.length == 1) { // single word but not multiline
                 addItem(sp[0], "");
-            }
-            else { // regular line
+            } else { // regular line
                 addItem(sp[0], StringUtils.join(Arrays.copyOfRange(sp, 1, sp.length), " "));
             }
 

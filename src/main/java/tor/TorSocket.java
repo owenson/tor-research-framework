@@ -39,117 +39,88 @@ import java.util.TreeMap;
 
 public class TorSocket {
 
-	private static Consensus consensus;
-	
-	SSLSocket sslsocket;
-	OutputStream out;
-	InputStream in;
-	
-	OnionRouter firstHop; // e.g. hop connected to
-	
-	// circuits for this socket
-	TreeMap<Integer, TorCircuit> circuits = new TreeMap<>();
+    private static Consensus consensus;
+
+    SSLSocket sslsocket;
+    OutputStream out;
+    InputStream in;
+
+    OnionRouter firstHop; // e.g. hop connected to
+
+    // circuits for this socket
+    TreeMap<Integer, TorCircuit> circuits = new TreeMap<>();
+
     //LinkedBlockingQueue<Cell> sendQueue = new LinkedBlockingQueue<Cell>();
-    enum STATES { INITIALISING, READY };
+    enum STATES {
+        INITIALISING, READY
+    }
+
+    ;
 
     private STATES state = STATES.INITIALISING;
     private Object stateNotify = new Object();
 
-	/**
-	 * Send a cell given payload
-	 * 
-	 * @param circid Circuit ID
-	 * @param cmd Cell Command.  See Cell.*
-	 * @param payload Cell Payload
-	 *
-	 */
-	public void sendCell(int circid, int cmd, byte[] payload)
-			throws IOException {
-        //try {
-            //sendQueue.put(new Cell(circid, cmd, payload));
-            out.write(new Cell(circid, cmd, payload).getBytes());
-     //   } catch (InterruptedException e) {
-     //       e.printStackTrace();
-//        }
+    /**
+     * Send a cell given payload
+     *
+     * @param circid  Circuit ID
+     * @param cmd     Cell Command.  See Cell.*
+     * @param payload Cell Payload
+     */
+    public void sendCell(int circid, int cmd, byte[] payload)
+            throws IOException {
+        out.write(new Cell(circid, cmd, payload).getBytes());
     }
 
     public void sendCell(Cell c)
             throws IOException {
- //       try {
-            out.write(c.getBytes());
-            //sendQueue.put(c);
-     ////   } catch (InterruptedException e) {
-     ////       e.printStackTrace();
-//        }
+
+        out.write(c.getBytes());
     }
-/*
-    public void processSendQueue() {
-        while(true) {
-            while (!sendQueue.isEmpty())
-                System.out.print(".");
-                try {
-                    out.write(sendQueue.take().getBytes());
-                } catch (IOException e) {
-                    e.printStackTrace();
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-        }
-	}
-*/
+
     private byte[] blockingRead(int length) throws IOException {
-       //byte buf[] = new byte[length];
-       return IOUtils.readFully(in, length, true);
-
-//       int off = 0;
-//       while(length>off) {
-//           int rlen = in.read(buf, off, length-off);
-//           if(rlen == -1)
-//               throw new IOException("failed read");
-//           off+=rlen;
-//       }
-//       return buf;
+        return IOUtils.readFully(in, length, true);
     }
-	
-	/**
-	 * Receive a cell from the socket and decode it into a Cell object
-	 * 
-	 * @return Cell object
-	 */
-	public Cell recvCell() throws IOException {
-		byte hdr[] =  blockingRead(3);
 
-		ByteBuffer buf = ByteBuffer.wrap(hdr);
-		buf.order(ByteOrder.BIG_ENDIAN);
-		int circid = buf.getShort();
-		int cmdId = buf.get() & 0xff;
-		int pllength = 509;
-			
-		if(cmdId == 7 || cmdId >= 128) {
-			pllength = ByteBuffer.wrap(blockingRead(2)).getShort();
-		}
-		
-		byte payload[] = blockingRead(pllength);
+    /**
+     * Receive a cell from the socket and decode it into a Cell object
+     *
+     * @return Cell object
+     */
+    public Cell recvCell() throws IOException {
+        byte hdr[] = blockingRead(3);
 
-		return new Cell(circid, cmdId, payload);
-	}
+        ByteBuffer buf = ByteBuffer.wrap(hdr);
+        buf.order(ByteOrder.BIG_ENDIAN);
+        int circid = buf.getShort();
+        int cmdId = buf.get() & 0xff;
+        int pllength = 509;
 
-	/**
-	 * Sends a NETINFO cell (used in connection init)
-	 */
-	public void sendNetInfo() throws IOException {
-		byte nibuf[] = new byte[4 + 2 + 4 + 3 + 4]; 
-		byte[] remote = sslsocket.getInetAddress().getAddress();
-		byte[] local = sslsocket.getLocalAddress().getAddress();
-		int epoch = (int)(System.currentTimeMillis()/1000L);
-		ByteBuffer buf = ByteBuffer.wrap(nibuf);
-		buf.putInt(epoch);
-		buf.put(new byte[] {04, 04});   // remote's address
-		buf.put(remote);
-		buf.put(new byte[] {01, 04, 04});  // our address
-		buf.put(local);
-		sendCell(0, Cell.NETINFO, nibuf);
-	}
+        if (cmdId == 7 || cmdId >= 128) {
+            pllength = ByteBuffer.wrap(blockingRead(2)).getShort();
+        }
+
+        byte payload[] = blockingRead(pllength);
+
+        return new Cell(circid, cmdId, payload);
+    }
+
+    /**
+     * Sends a NETINFO cell (used in connection init)
+     */
+    public void sendNetInfo() throws IOException {
+        byte nibuf[] = new byte[4 + 2 + 4 + 3 + 4];
+        byte[] remote = sslsocket.getInetAddress().getAddress();
+        byte[] local = sslsocket.getLocalAddress().getAddress();
+        int epoch = (int) (System.currentTimeMillis() / 1000L);
+        ByteBuffer buf = ByteBuffer.wrap(nibuf);
+        buf.putInt(epoch);
+        buf.put(new byte[]{04, 04});   // remote's address
+        buf.put(remote);
+        buf.put(new byte[]{01, 04, 04});  // our address
+        buf.put(local);
+        sendCell(0, Cell.NETINFO, nibuf);
+    }
 
     public void setState(STATES newState) {
         synchronized (stateNotify) {
@@ -157,111 +128,100 @@ public class TorSocket {
             this.stateNotify.notify();
         }
     }
-	/**
-	 * Main loop.  Handles incoming cells and sends any data waiting to be send down circuits/streams
-	 */
-	public void receiveHandlerLoop() {
-        while(true) {
+
+    /**
+     * Main loop.  Handles incoming cells and sends any data waiting to be send down circuits/streams
+     */
+    public void receiveHandlerLoop() {
+        while (true) {
             // receive a cell
-            Cell c= null;
+            Cell c = null;
             try {
                 c = recvCell();
 
-                switch(c.cmdId) {
+                switch (c.cmdId) {
                     case Cell.NETINFO:
                         sendNetInfo();
                         setState(STATES.READY);
                         break;
                 }
                 TorCircuit circ = circuits.get(new Integer(c.circId));
-                if(circ == null || !circ.handleCell(c))
-                    System.out.println("unhandled cell "+c);
+                if (circ == null || !circ.handleCell(c))
+                    System.out.println("unhandled cell " + c);
 
             } catch (IOException e) {
                 e.printStackTrace();
                 return;
             }
         }
-	}
-	
-	/**
-	 * Creates a circuit
-	 * 
-	 * @return TorCircuit object
-	 */
-	public TorCircuit createCircuit(boolean blocking) {
-		// TODO Auto-generated method stub
-		TorCircuit circ = new TorCircuit(this);
+    }
+
+    /**
+     * Creates a circuit
+     *
+     * @return TorCircuit object
+     */
+    public TorCircuit createCircuit(boolean blocking) {
+        // TODO Auto-generated method stub
+        TorCircuit circ = new TorCircuit(this);
         circ.setBlocking(blocking);
-		circuits.put(circ.circId, circ);
-		return circ;
-	}
-	
-	/*public TorSocket(OnionRouter guard) throws IOException  {
-		this(guard.ip.getHostAddress(), guard.orport);
-	}*/
-	
-	/**
-	 * Main constructor. Connects and does connection setup.
-	 * 
-	 * @param fh OnionRouter for first hop (used for Hostname/IP string and Port)
-	 */
-	public TorSocket(OnionRouter fh) throws IOException  {
+        circuits.put(circ.circId, circ);
+        return circ;
+    }
 
-		if(consensus == null) consensus = Consensus.getConsensus();
+    /**
+     * Main constructor. Connects and does connection setup.
+     *
+     * @param fh OnionRouter for first hop (used for Hostname/IP string and Port)
+     */
+    public TorSocket(OnionRouter fh) throws IOException {
 
-		//firstHop = consensus.getRouterByIpPort(host, port);
+        if (consensus == null) consensus = Consensus.getConsensus();
+
         firstHop = fh;
-		if(firstHop == null)
-			throw new RuntimeException("Couldn't find router ip in consensus");
-		
-		Security.addProvider(new BouncyCastleProvider());
-		// fake trust manager to accept all certs
-		TrustManager[] trustAllCerts = new TrustManager[] { new X509TrustManager() {
+        if (firstHop == null)
+            throw new RuntimeException("Couldn't find router ip in consensus");
 
-			@Override
-			public void checkClientTrusted(X509Certificate[] chain,
-					String authType) throws CertificateException {
-				// TODO Auto-generated method stub
+        Security.addProvider(new BouncyCastleProvider());
+        // fake trust manager to accept all certs
+        TrustManager[] trustAllCerts = new TrustManager[]{new X509TrustManager() {
 
-			}
+            @Override
+            public void checkClientTrusted(X509Certificate[] chain,
+                                           String authType) throws CertificateException {
+                // TODO Auto-generated method stub
 
-			@Override
-			public void checkServerTrusted(X509Certificate[] chain,
-					String authType) throws CertificateException {
-				// TODO Auto-generated method stub
+            }
 
-			}
+            @Override
+            public void checkServerTrusted(X509Certificate[] chain,
+                                           String authType) throws CertificateException {
+                // TODO Auto-generated method stub
 
-			@Override
-			public X509Certificate[] getAcceptedIssuers() {
-				// TODO Auto-generated method stub
-				return null;
-			}
+            }
 
-		} };
+            @Override
+            public X509Certificate[] getAcceptedIssuers() {
+                // TODO Auto-generated method stub
+                return null;
+            }
 
-		SSLContext sc;
-		
-		try {
-			sc = SSLContext.getInstance("SSL");
-			sc.init(null, trustAllCerts, new java.security.SecureRandom());
-		} catch (KeyManagementException | NoSuchAlgorithmException e) {
-			throw new RuntimeException(e);
-		}
+        }};
 
-		// connect
-		sslsocket = (SSLSocket) sc.getSocketFactory().createSocket(firstHop.ip, firstHop.orport);
+        SSLContext sc;
 
-		out = sslsocket.getOutputStream();
-		in = sslsocket.getInputStream();
+        try {
+            sc = SSLContext.getInstance("SSL");
+            sc.init(null, trustAllCerts, new java.security.SecureRandom());
+        } catch (KeyManagementException | NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
+        }
 
-//        new Thread(new Runnable() {
-//            @Override
-//            public void run() {
-//                processSendQueue();
-//            }
-//        }).start();
+        // connect
+        sslsocket = (SSLSocket) sc.getSocketFactory().createSocket(firstHop.ip, firstHop.orport);
+
+        out = sslsocket.getOutputStream();
+        in = sslsocket.getInputStream();
 
         new Thread(new Runnable() {
             @Override
@@ -270,10 +230,10 @@ public class TorSocket {
             }
         }).start();
 
-		// versions cell
-		sendCell(0, Cell.VERSIONS, new byte[] { 00, 03 });
+        // versions cell
+        sendCell(0, Cell.VERSIONS, new byte[]{00, 03});
 
-        while(state != STATES.READY) {
+        while (state != STATES.READY) {
             synchronized (stateNotify) {
                 try {
                     stateNotify.wait();
@@ -282,5 +242,5 @@ public class TorSocket {
                 }
             }
         }
-	}
+    }
 }
