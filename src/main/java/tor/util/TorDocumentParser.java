@@ -33,7 +33,7 @@ import java.util.TreeMap;
 public class TorDocumentParser {
     public TreeMap<String,String> map = new TreeMap<>();
 
-    // prduces a map from a normal tor document, key/value pairs
+    // produces a map from a normal tor document, key/value pairs
     // parses block BEGIN-ENDS correctly
     // where same key appears twice, value is the concatenated values with | as a delimiter
 
