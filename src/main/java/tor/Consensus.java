@@ -109,7 +109,7 @@ public class Consensus {
 
                 // Get a list of running, valid, directory routers, excluding bad exits
                 // Typically, 80% of routers are running, and almost all are valid
-                OnionRouter dir = getRandomORWithFlag("V2Dir,Running,Valid");
+                OnionRouter dir = getRandomORWithFlag("V2Dir,Running,Valid,Fast");
 
                 System.out.println("Connecting to " + directoryType + " " + dir.name);
                 try {
@@ -373,7 +373,7 @@ public class Consensus {
     }
 
     /**
-     * Return the routers with all of the supplied flags and the specified exitPort, optonally excluding bad exits.
+     * Return the routers with all of the supplied flags and the specified exitPort, optionally excluding bad exits.
      * See https://consensus-health.torproject.org for a list of known flags.
      *
      * @param flags           the desired flags (case-sensitive)
@@ -384,20 +384,16 @@ public class Consensus {
     public OnionRouter getRandomORWithFlag(String[] flags, int exitPort, Boolean excludeBadExits) {
         TreeMap<String, OnionRouter> map = getORsWithFlag(flags, excludeBadExits);
         OnionRouter ors[] = map.values().toArray(new OnionRouter[map.size()]);
-
-        int idx = TorCrypto.rnd.nextInt(ors.length);
+        boolean acceptsExitPort = false;
+        int idx=TorCrypto.rnd.nextInt(ors.length);
 
         // ignore exitPort 0
         if (exitPort != 0) {
-
-            Boolean acceptsExitPort = ors[idx].acceptsIPv4ExitPort(exitPort);
-
             // iterate through the routers until we find one that accepts the desired exitPort
-            while (!acceptsExitPort) {
+            do {
                 idx = TorCrypto.rnd.nextInt(ors.length);
                 acceptsExitPort = ors[idx].acceptsIPv4ExitPort(exitPort);
-            }
-
+            } while (!acceptsExitPort);
         }
 
         return ors[idx];
