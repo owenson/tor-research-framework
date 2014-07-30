@@ -184,6 +184,13 @@ public class Consensus {
                     for (String s : ln.split(" "))
                         if (!s.equals("s"))
                             cur.flags.add(s);
+                } else if (ln.startsWith("p") && cur != null) {
+                    // "p" SP ("accept" / "reject") SP PortList NL
+                    String[] lineSplit = ln.split(" ");
+
+                    // tolerate extra junk at the end of the line
+                    if (lineSplit.length >= 3)
+                      cur.consensusIPv4ExitPortSummary = lineSplit[1] + " " + lineSplit[2];
                 }
         } catch (MalformedURLException e) {
             return false;
