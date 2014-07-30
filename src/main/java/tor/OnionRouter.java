@@ -29,11 +29,11 @@ import java.util.HashSet;
 
 public class OnionRouter {
     String name;
-	InetAddress ip;
-	int orport;
-	int dirport;
-	PublicKey pubKey = null;
-	public String identityhash;
+    InetAddress ip;
+    int orport;
+    int dirport;
+    PublicKey pubKey = null;
+    public String identityhash;
     public HashSet<String> flags = new HashSet<>();
     public byte[] pubKeyraw;
     public String consensusIPv4ExitPortSummary = null;
@@ -47,17 +47,17 @@ public class OnionRouter {
         dirport = _dirport;
         identityhash = _ident;
     }
-	
-	public PublicKey getPubKey() throws IOException {
-		if (pubKey != null)
-			return pubKey;
+
+    public PublicKey getPubKey() throws IOException {
+        if (pubKey != null)
+            return pubKey;
         TorDocumentParser rdr = new TorDocumentParser(Consensus.getConsensus().getRouterDescriptor(identityhash));
 
         pubKeyraw = Base64.decodeBase64(rdr.getItem("onion-key"));
         pubKey = TorCrypto.asn1GetPublicKey(pubKeyraw);
 
-		return pubKey;
-	}
+        return pubKey;
+    }
 
     public Boolean acceptsIPv4ExitPort(int exitPort) {
 
@@ -221,10 +221,10 @@ public class OnionRouter {
         return false;
     }
 
-	@Override
-	public String toString() {
-		return "OnionRouter [name=" + name + ", ip=" + ip + ", orport="
-				+ orport + ", identityhash=" + identityhash + "]";
-	}
+    @Override
+    public String toString() {
+        return "OnionRouter [name=" + name + ", ip=" + ip + ", orport="
+                + orport + ", identityhash=" + identityhash + "]";
+    }
 
 }
