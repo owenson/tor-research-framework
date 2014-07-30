@@ -19,12 +19,10 @@
 package tor;
 
 import org.apache.commons.codec.binary.Base64;
-import org.apache.commons.io.IOUtils;
 import tor.util.TorDocumentParser;
 
 import java.io.IOException;
 import java.net.InetAddress;
-import java.net.URL;
 import java.net.UnknownHostException;
 import java.security.PublicKey;
 import java.util.HashSet;
@@ -38,15 +36,17 @@ public class OnionRouter {
 	public String identityhash;
     public HashSet<String> flags = new HashSet<>();
     public byte[] pubKeyraw;
-    public String[] IPv4ExitPolicy = null;
+    public String consensusIPv4ExitPortSummary = null;
+    public String[] descriptorIPv4ExitPolicy = null;
+    public String[] parsedIPv4ExitPortList = null;
 
     public OnionRouter(String _nm, String _ident, String _ip, int _orport, int _dirport) throws UnknownHostException {
-		name = _nm;
-		ip = InetAddress.getByName(_ip);
-		orport = _orport;
-		dirport = _dirport;
-		identityhash = _ident;
-	}
+        name = _nm;
+        ip = InetAddress.getByName(_ip);
+        orport = _orport;
+        dirport = _dirport;
+        identityhash = _ident;
+    }
 	
 	public PublicKey getPubKey() throws IOException {
 		if (pubKey != null)
@@ -62,197 +62,163 @@ public class OnionRouter {
     public Boolean acceptsIPv4ExitPort(int exitPort) {
 
         // ignore an exitPort of 0, and invalid exitPorts
+        // return true to short-circuit potentially expensive checks that will never succeed, through the entire router list
         if (exitPort == 0)
             return true;
         else if (exitPort < 0 || exitPort > 65535)
             return true;
 
-        if (IPv4ExitPolicy == null) {
-            try {
-                // Do we need to download this separately, or does it come as part of the consensus?
-                TorDocumentParser rdr = new TorDocumentParser(Consensus.getConsensus().getRouterDescriptor(identityhash));
-                IPv4ExitPolicy = rdr.getArrayItem(TorDocumentParser.IPv4PolicyKey);
-            } catch(IOException e) {
-                System.out.println("acceptsIPv4ExitPort: failed to retrieve exit policy for: " + name
-                        + ", assuming reject. Parsing router descriptor failed with IOException: " + e.toString());
-                return false;
-            } catch(RuntimeException e) {
-                System.out.println("acceptsIPv4ExitPort: failed to retrieve exit policy for: " + name
-                        + ", assuming reject. Retrieving consensus failed with RuntimeException: " + e.toString());
-                return false;
-            }
-        }
+        if (parsedIPv4ExitPortList == null) {
 
-        //System.out.println("acceptsIPv4ExitPort: checking for exit port " + String.valueOf(exitPort) + " in:\n"
-        //        + String.join("\n", IPv4ExitPolicy));
-
-        // The algorithm for parsing exit policies is complex,
-        // and even tor (C) sometimes connects to exits that are not suitable
-        // (e.g. because the remote IP isn't known, and therefore tor only performs an approximate coverage check)
-        // See https://gitweb.torproject.org/torspec.git/blob/HEAD:/dir-spec.txt for the gory details
-
-        // We implement a simplified version which ignores IP addresses (assuming all for reject and none for accept)
-        // Each line of the policy consists of:
-        // accept/reject IP:Port[-Range]
-        for (String policy : IPv4ExitPolicy) {
-            String[] lineSplit = policy.split(" ");
-
-            if (lineSplit.length != 2) {
-                // a line we don't understand - assume policy is too complex
-                System.out.println("acceptsIPv4ExitPort: failed to parse line in exit policy for: " + name
-                        + ", assuming reject by: " + policy);
-                return false;
-            } else if (lineSplit[0].equals("accept")) {
-                // exitpattern ::= addrspec ":" portspec
-                String[] addressSplit = lineSplit[1].split(":");
-
-                if (addressSplit.length != 2) {
-                    // a line we don't understand - assume policy is too complex
-                    System.out.println("acceptsIPv4ExitPort: failed to parse accept address in exit policy for: " + name
-                            + ", assuming reject by: " + policy);
+            // if we don't have the p line from the consensus, download the entire router descriptor
+            if (consensusIPv4ExitPortSummary == null && descriptorIPv4ExitPolicy == null) {
+                try {
+                    TorDocumentParser rdr = new TorDocumentParser(Consensus.getConsensus().getRouterDescriptor(identityhash));
+                    descriptorIPv4ExitPolicy = rdr.getArrayItem(TorDocumentParser.IPv4PolicyKey);
+                } catch(IOException e) {
+                    System.out.println("acceptsIPv4ExitPort: failed to retrieve exit policy for: " + name
+                            + ", assuming reject. Parsing router descriptor failed with IOException: " + e.toString());
                     return false;
-                } else {
-                    // an ip followed by port range
-                    String ip = addressSplit[0];
-                    String portRange = addressSplit[1];
+                } catch(RuntimeException e) {
+                    System.out.println("acceptsIPv4ExitPort: failed to retrieve exit policy for: " + name
+                            + ", assuming reject. Retrieving consensus failed with RuntimeException: " + e.toString());
+                    return false;
+                }
+            }
 
-                    // check ip is "*", otherwise disregard line as not applying to all IPs
+            // The algorithm for parsing exit policies is complex,
+            // and even tor (C) sometimes connects to exits that are not suitable
+            // (e.g. because the remote IP isn't known, and therefore tor only performs an approximate coverage check,
+            // or because tor is using the port summary from the consensus).
+            // See https://gitweb.torproject.org/torspec.git/blob/HEAD:/dir-spec.txt for the gory details
 
-                    if (ip.equals("*")) {
-                        //portspec ::= "*" | port | port "-" port
-                        String[] portSplit = portRange.split("-");
+            // use p line in consensus if available
+            // https://gitweb.torproject.org/torspec.git/blob/HEAD:/dir-spec.txt
+            // "p" SP ("accept" / "reject") SP PortList NL
+            // [At most once.]
+            // PortList = PortOrRange
+            // PortList = PortList "," PortOrRange
+            // PortOrRange = INT "-" INT / INT
+            // A list of those ports that this router supports (if 'accept')
+            // or does not support (if 'reject') for exit to "most addresses".
 
-                        if (portSplit.length == 0 || portSplit.length > 2) {
-                            // a line we don't understand - assume policy is too complex
-                            System.out.println("acceptsIPv4ExitPort: failed to parse accept port (range) in exit policy for: " + name
-                                    + ", assuming reject by: " + policy);
-                            return false;
-                        } else if (portSplit.length == 1) {
-                            // a single port
+            //System.out.println("acceptsIPv4ExitPort: checking for exit port " + String.valueOf(exitPort) + " in: "
+            //        + consensusIPv4ExitPortSummary);
 
-                            if (portSplit[0].equals("*"))
-                                // accept all ports
-                                return true;
-                            else if (portSplit[0].equals(String.valueOf(exitPort)))
-                                // accept exact match
-                                return true;
-                            else
-                                // no match, so check the next line
-                                continue;
+            // Pre-process the exit summary into an array of:
+            // ("accept" / "reject") SP PortOrRange
+            if (consensusIPv4ExitPortSummary != null) {
+                String[] lineSplit = consensusIPv4ExitPortSummary.split(" ");
+                String acceptOrReject = lineSplit[0];
+                String[] portListSplit = lineSplit[1].split(",");
+                parsedIPv4ExitPortList = new String[portListSplit.length];
 
-                        } else /*if (portSplit.length == 2)*/ {
-                            // a port range
-                            try {
+                int i = 0;
+                for (String portOrRange : portListSplit) {
+                    parsedIPv4ExitPortList[i] = acceptOrReject + " " + portOrRange;
+                    i++;
+                }
+            }
 
-                                int lowPort = Integer.parseInt(portSplit[0]);
-                                int highPort = Integer.parseInt(portSplit[1]);
+            //System.out.println("acceptsIPv4ExitPort: checking for exit port " + String.valueOf(exitPort) + " in:\n"
+            //        + String.join("\n", descriptorIPv4ExitPolicy));
 
-                                if (exitPort >= lowPort && exitPort <= highPort)
-                                    // accept range match
-                                    return true;
-                                else
-                                    // no match, so check the next line
-                                    continue;
+            // We implement a simplified version which ignores IP addresses (skipping any that aren't "*")
+            // Each line of the policy consists of:
+            // ("accept" / "reject") SP IP ":" PortOrRange NL
 
-                            } catch (NumberFormatException e) {
-                                // a line we don't understand - assume policy is too complex
-                                System.out.println("acceptsIPv4ExitPort: failed to parse accept port numbers in exit policy for: " + name
-                                        + ", assuming reject by: " + policy);
-                                return false;
-                            }
+            // Pre-process the exit policy into an array of:
+            // ("accept" / "reject") SP PortOrRange
+
+            Boolean isParsedListEmpty = false;
+
+            if (parsedIPv4ExitPortList == null)
+                isParsedListEmpty = true;
+            else if (parsedIPv4ExitPortList.length == 0)
+                isParsedListEmpty = true;
+
+            if (isParsedListEmpty && descriptorIPv4ExitPolicy != null) {
+                // allow an extra item for the final "accept *"
+                parsedIPv4ExitPortList = new String[descriptorIPv4ExitPolicy.length + 1];
+
+                int i = 0;
+                for (String policy : descriptorIPv4ExitPolicy) {
+                    String[] lineSplit = policy.split(" ");
+                    String acceptOrReject = lineSplit[0];
+                    String[] ipPortSplit = lineSplit[1].split(":");
+                    String portOrRange = ipPortSplit[1];
+
+                    // only process lines that apply to all IPs
+                    if (ipPortSplit.equals("*")) {
+
+                        // replace * ports with the full numeric port range
+                        if (portOrRange.equals("*")) {
+                            portOrRange = "1-65535";
                         }
 
-                    } else {
-                        // we haven't found an accept policy that applies to all IPs
-                        // try the next policy
-                        continue;
+                        parsedIPv4ExitPortList[i] = acceptOrReject + " " + portOrRange;
+                        i++;
                     }
                 }
 
-            } else if (lineSplit[0].equals("reject")) {
-                // this code repeats a lot of the "accept" code and could be refactored
-
-                // exitpattern ::= addrspec ":" portspec
-                String[] addressSplit = lineSplit[1].split(":");
-
-                if (addressSplit.length != 2) {
-                    // a line we don't understand - assume policy is too complex
-                    System.out.println("acceptsIPv4ExitPort: failed to parse reject address in exit policy for: " + name
-                            + ", assuming reject by: " + policy);
-                    return false;
-                } else {
-                    // an ip followed by port range
-                    String ip = addressSplit[0];
-                    String portRange = addressSplit[1];
-
-                    // check ip is "*", otherwise disregard line as not applying to all IPs
-                    if (ip.equals("*")) {
-
-                        //portspec ::= "*" | port | port "-" port
-                        String[] portSplit = portRange.split("-");
-
-                        if (portSplit.length == 0 || portSplit.length > 2) {
-                            // a line we don't understand - assume policy is too complex
-                            System.out.println("acceptsIPv4ExitPort: failed to parse reject port (range) in exit policy for: " + name
-                                    + ", assuming reject by: " + policy);
-                            return false;
-                        } else if (portSplit.length == 1) {
-                            // a single port
-
-                            if (portSplit[0].equals("*")) {
-                                // reject all ports
-                                System.out.println("acceptsIPv4ExitPort: reject " + portSplit[0] + " in exit policy for: " + name
-                                        + " in: " + policy);
-                                return false;
-                            } else if (portSplit[0].equals(String.valueOf(exitPort))) {
-                                // reject exact match
-                                System.out.println("acceptsIPv4ExitPort: reject " + portSplit[0] + " in exit policy for: " + name
-                                        + " in: " + policy);
-                                return false;
-                            } else {
-                                // no match, so check the next line
-                                continue;
-                            }
-
-                        } else /*if (portSplit.length == 2)*/ {
-                            // a port range
-                            try {
-
-                                int lowPort = Integer.parseInt(portSplit[0]);
-                                int highPort = Integer.parseInt(portSplit[1]);
-
-                                if (exitPort >= lowPort && exitPort <= highPort) {
-                                    // reject range match
-                                    System.out.println("acceptsIPv4ExitPort: reject "
-                                            + portSplit[0] + "-" + portSplit[1] + " in exit policy for: " + name
-                                            + " in: " + policy);
-                                    return false;
-                                } else {
-                                    // no match, so check the next line
-                                    continue;
-                                }
-
-                            } catch (NumberFormatException e) {
-                                // a line we don't understand - assume policy is too complex
-                                System.out.println("acceptsIPv4ExitPort: failed to parse reject port numbers in exit policy for: " + name
-                                        + ", assuming reject by: " + policy);
-                                return false;
-                            }
-                        }
-                    }
-                }
-
-            } else {
-                // not "accept" or "reject", assume further details of policy are too complex
-                System.out.println("acceptsIPv4ExitPort: failed to parse accept/reject: (" + lineSplit[0]
-                        + ") in exit policy for: " + name
-                        + ", assuming reject by: " + policy);
-                return false;
+                // "if no rule matches, the address will be accepted"
+                parsedIPv4ExitPortList[i] = "accept 1-65535";
+                i++;
             }
         }
 
-        // "if no rule matches, the address will be accepted"
-        return true;
+        // now compare the desired port to the parsed port policy
+        // The parsed policy is an ordered array of:
+        // ("accept" / "reject") SP PortOrRange
+        if (parsedIPv4ExitPortList != null) {
+
+            for (String portPolicy : parsedIPv4ExitPortList) {
+
+                // because we skip some lines when parsing descriptors, some lines may be empty
+                if (portPolicy != null) {
+
+                    String[] lineSplit = portPolicy.split(" ");
+                    Boolean accepted = lineSplit[0].equals("accept");
+                    String portRange = lineSplit[1];
+                    String[] portSplit = portRange.split("-");
+
+                    if (portSplit.length == 1) {
+                        // duplicate the single port to make a range
+                        String port = portSplit[0];
+
+                        portSplit = new String[2];
+                        portSplit[0] = port;
+                        portSplit[1] = port;
+                    }
+
+                    // portSplit is now a port range
+                    try {
+
+                        int lowPort = Integer.parseInt(portSplit[0]);
+                        int highPort = Integer.parseInt(portSplit[1]);
+
+                        if (exitPort >= lowPort && exitPort <= highPort)
+                            // return the range match result
+                            return accepted;
+                        else
+                            // no match, so check the next line
+                            continue;
+
+                    } catch (NumberFormatException e) {
+                        // a line we don't understand - assume policy is too complex
+                        System.out.println("acceptsIPv4ExitPort: failed to parse " + lineSplit[0]
+                                + " port numbers in exit policy for: " + name
+                                + ", assuming reject by: " + portPolicy);
+                        return false;
+                    }
+                }
+            }
+        }
+
+        // if no line matches the port,
+        // either we've used a consensus summary that doesn't contain the port,
+        // or we couldn't find both the consensus summary and the router descriptor
+        return false;
     }
 
 	@Override
