@@ -94,7 +94,7 @@ public class Consensus {
             int i;
             for (i = 0; i < dirTriesLimit; i++) {
                 // The V2Dir flag includes both authorities and directory caches
-                // These typically makes up around 60% of routers
+                // These typically make up around 60% of routers
                 // We could filter out authorities, but they make up less than 1% of the directories
 
                 // Get a list of running, valid, directory routers, excluding bad exits
