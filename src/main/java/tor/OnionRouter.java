@@ -68,25 +68,8 @@ public class OnionRouter {
         else if (exitPort < 0 || exitPort > 65535)
             return true;
 
-<<<<<<< HEAD
-        if (IPv4ExitPolicy == null) {
-            try {
-                // Do we need to download this separately, or does it come as part of the consensus?
-                TorDocumentParser rdr = new TorDocumentParser(Consensus.getConsensus().getRouterDescriptor(identityhash));
-                IPv4ExitPolicy = rdr.getArrayItem(TorDocumentParser.IPv4PolicyKey);
-            } catch(IOException e) {
-                System.out.println("acceptsIPv4ExitPort: failed to retrieve exit policy for: " + name
-                        + ", assuming reject. Parsing router descriptor failed with IOException: " + e.toString());
-                return false;
-            } catch(RuntimeException e) {
-                System.out.println("acceptsIPv4ExitPort: failed to retrieve exit policy for: " + name
-                        + ", assuming reject. Retrieving consensus failed with RuntimeException: " + e.toString());
-                return false;
-            }
-        }
-=======
+
         if (parsedIPv4ExitPortList == null) {
->>>>>>> d493d464e63ffc6acc2d280445119fcf5d6db270
 
             // if we don't have the p line from the consensus, download the entire router descriptor
             if (consensusIPv4ExitPortSummary == null && descriptorIPv4ExitPolicy == null) {

@@ -35,13 +35,21 @@ import java.util.TreeMap;
 import java.util.zip.InflaterInputStream;
 
 public class Consensus {
-	// --Commented out by Inspection (30/07/2014 06:24):
-	// public final static String DIRSERV = "86.59.21.38";
-
     // The maximum number of connection tries to directory caches before falling back to authorities
     public final static int MAX_TRIES = 10;
 
+    /**
+     * Whether to use only the directory authorities to fetch the consensus and router descriptors?
+     * Otherwise, will fetch from any directory node.
+     */
+    boolean useOnlyAuthorities = false;
+
+
+    /**
+     * A map containing the parsed consensus (String is identity as a hex string)
+     */
 	public TreeMap<String, OnionRouter> routers = new TreeMap<>();
+
     String authorities[] = {    "moria1 orport=9101 v3ident=D586D18309DED4CD6D57C18FDB97EFA96D330566 128.31.0.39:9131 9695 DFC3 5FFE B861 329B 9F1A B04C 4639 7020 CE31",
             "tor26 orport=443 v3ident=14C131DFC5C6F93646BE72FA1401C02A8DF2E8B4 86.59.21.38:80 847B 1F85 0344 D787 6491 A548 92F9 0493 4E4E B85D",
             "dizum orport=443 v3ident=E8A9C45EDE6D711294FADF8E7951F4DE6CA56B58 194.109.206.212:80 7EA6 EAD6 FD83 083C 538F 4403 8BBF A077 587D D755",
@@ -53,20 +61,14 @@ public class Consensus {
             "maatuska orport=80 v3ident=49015F787433103580E3B66A1707A00E60F2D15B 171.25.193.9:443 BD6A 8292 55CB 08E6 6FBE 7D37 4836 3586 E46B 3810",
             "Faravahar orport=443 v3ident=EFCBE720AB3A82B99F9E953CD5BF50F7EEFC7B97 154.35.32.5:80 CF6D 0AAF B385 BE71 B8E1 11FC 5CFF 4B47 9237 33BC"
     };
-	
-	public Consensus() throws RuntimeException {
-            fetchConsensus();
+
+    public void setUseOnlyAuthorities(boolean useOnlyAuthorities) {
+        this.useOnlyAuthorities = useOnlyAuthorities;
     }
 
-    /***
-     * Try random directories until we get a successful dir stream, falling back to the pre-configured authorities after MAX_TRIES,
-     * or if we don't have an existing consensus
-     *
-     * @param path Desired dir path
-     * @return InputStream for reading
-     */
-    public InputStream getDirectoryStream(String path) {
-        return getDirectoryStream(path, true);
+
+	public Consensus() throws RuntimeException {
+            fetchConsensus();
     }
 
     /***
@@ -76,15 +78,14 @@ public class Consensus {
      * If you're having speed issues, try adding "Fast" to the lists of flags below.
      *
      * @param path Desired dir path
-     * @param useDirectoryCaches use directory caches, if an existing consensus is available
      * @return InputStream for reading
      * @throws RuntimeException when it fails to download path after MAX_TRIES tries
      */
-    public InputStream getDirectoryStream(String path, Boolean useDirectoryCaches) throws RuntimeException {
+    public InputStream getDirectoryStream(String path) throws RuntimeException {
         String directoryType = "directory cache";
 
         // Avoid recursion by checking for an existing consensus before calling getRandomORWithFlag()
-        if (consensus != null && useDirectoryCaches) {
+        if (consensus != null && useOnlyAuthorities) {
             // Try up to MAX_TRIES random ORs,
             // but don't try more than the number of running, valid, directory routers
             // (because this is random, some may be tried twice, and some may be skipped)
@@ -165,7 +166,6 @@ public class Consensus {
 
     private boolean fetchConsensus() {
         try {
-            //URL conurl = new URL("http://" + ip + ":" + dirport + "/tor/status-vote/current/consensus.z");
             InputStream connStream = getDirectoryStream("/tor/status-vote/current/consensus.z");
 
             BufferedReader in = new BufferedReader(new InputStreamReader(new InflaterInputStream(connStream)));
