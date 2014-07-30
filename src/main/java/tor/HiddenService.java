@@ -156,7 +156,7 @@ public class HiddenService {
         return null;
     }
 
-    public static TorCircuit sendIntroduce(TorSocket sock, String onion, TorCircuit rendz) throws IOException {
+    public static void sendIntroduce(TorSocket sock, String onion, TorCircuit rendz) throws IOException {
         System.out.println("Fetching Hidden Service Descriptor");
         String hsdescTxt = fetchHSDescriptor(sock, onion);
         OnionRouter rendzOR = rendz.getLastHop().router;
@@ -235,8 +235,5 @@ public class HiddenService {
         rendz.waitForState(TorCircuit.STATES.RENDEZVOUS_COMPLETE, false);
 
         ipcirc.destroy(); // no longer needed
-
-        return null;
-
     }
 }
