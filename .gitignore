@@ -1,3 +1,4 @@
 # IntelliJ-specific directories
 idea/
+idea~/
 target/
