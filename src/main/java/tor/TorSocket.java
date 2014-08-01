@@ -162,7 +162,6 @@ public class TorSocket {
      * @return TorCircuit object
      */
     public TorCircuit createCircuit(boolean blocking) {
-        // TODO Auto-generated method stub
         TorCircuit circ = new TorCircuit(this);
         circ.setBlocking(blocking);
         circuits.put(circ.circId, circ);
