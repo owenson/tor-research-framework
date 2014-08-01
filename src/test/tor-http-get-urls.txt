@@ -108,7 +108,7 @@ KEYS_BASE_URL “fp” SLASH ID_FP [ Z ]
 KEYS_BASE_URL “sk” SLASH SK_FP [ Z ]
 KEYS_BASE_URL “fp-sk” SLASH ID_SK [ Z ]
 KEYS_BASE_URL “fp-sk” SLASH ID_SK_LIST [ Z ]
-KEYS_BASE_URL all [ Z ]
+KEYS_BASE_URL “all” [ Z ]
 
 
 EXTRA_BASE_URL = DL_BASE_URL “extra” SLASH
@@ -118,19 +118,19 @@ EXTRA_BASE_URL = DL_BASE_URL “extra” SLASH
 EXTRA_BASE_URL “fp” SLASH ID_LIST [ Z ]
 # Is SIG_DIGEST_LIST permitted here?
 EXTRA_BASE_URL “d” SLASH SIG_DIGEST_LIST [ Z ]
-EXTRA_BASE_URL authority [ Z ]
-EXTRA_BASE_URL all [ Z ]
+EXTRA_BASE_URL “authority” [ Z ]
+EXTRA_BASE_URL “all” [ Z ]
 
 
 Download from Authorities Only:
 
 KEYS_BASE_URL authority [ Z ]
 # Votes of self, FP, and digest
-STATUS_BASE_URL authority [ Z ]
+STATUS_BASE_URL “authority” [ Z ]
 STATUS_BASE_URL ID_FP [ Z ]
 STATUS_BASE_URL “d” SLASH SIG_DIGEST [ Z ]
 # Detached signatures
-STATUS_BASE_URL consensus-signatures [ Z ]
+STATUS_BASE_URL “consensus-signatures” [ Z ]
 
 
 Submission to Authorities:
