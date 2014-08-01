@@ -19,6 +19,7 @@
 package tor;
 
 import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.lang.StringUtils;
 import tor.util.TorDocumentParser;
 
 import java.io.IOException;
@@ -231,6 +232,6 @@ public class OnionRouter {
         if(resolveHostname)
             ip.getHostName();
         return "OnionRouter [name=" + name + ", ip=" + ip + ", orport="
-                + orport + ", identityhash=" + identityhash + "]";
+                + orport + ", identityhash=" + identityhash + ", Flags=(" + StringUtils.join(flags.iterator(), ",") + ")]";
     }
 }

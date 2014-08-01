@@ -39,12 +39,17 @@ public class SimpleExample {
         // use createRoute as below, or you can use create() followed by extend() manually
         //circ.create();
         //circ.extend(con.getRandomORWithFlag("Exit"));
+
+        System.out.println("==========================");
+        System.out.println("Creating route through tor");
         circ.createRoute("Snowden4ever,abbie");
 
         TorStream stream = circ.createStream("ghowen.me", 80, null);
         stream.waitForState(TorStream.STATES.READY);
 
-        System.out.println("Connected to remote host through Tor");
+        System.out.println("====================================");
+        System.out.println("Connected to remote host through tor");
+
         stream.sendHTTPGETRequest("/ip", "ghowen.me");
 
         BufferedReader rdr = new BufferedReader(new InputStreamReader(stream.getInputStream()));
