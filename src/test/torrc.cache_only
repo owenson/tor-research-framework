@@ -1,0 +1,103 @@
+# Configure a private local tor directory cache (not router) on port 8880
+# Cache everything from the directory authorities
+# Don't run a router, and don't tell the directory authorities about us
+# Only allow connections on 127.0.0.1:8880
+
+# Usage:
+# tor -f /test/tor/tor-features-data/torrc.cache_only --DataDirectory /test/tor/tor-features-data/
+
+DirPort 127.0.0.1:8880 NoAdvertise
+DirPortFrontPage /test/tor/tor-features-data/tor-dir-test-notice.html
+Address 127.0.0.1
+ContactInfo <FIXME: insert email to be notified of misconfigurations>
+Nickname LocalDirCacheTest
+
+# Test against the least secure version, then re-test on the others
+DataDirectory /test/tor/tor-features-data
+#DataDirectory /test/tor/tor-default-data
+#DataDirectory /test/tor/tor-harden-data
+
+PidFile /test/tor/tor-features-data/tor.pid
+
+# Log debug for the domains we're testing to stderr and the data drectory
+Log notice [http,net,dir,dirserv]info stderr
+Log notice [http,net,dir,dirserv]info file /test/tor/tor-features-data/stderr.log
+Log debug file /test/tor/tor-features-data/debug.log
+
+# You may wish to reduce the impact on the directory authorities
+# (particularly when running automated tests)
+# by configuring a local tor router as a preferred fallback directory
+#FallbackDir 127.0.0.1:80 orport=9001 id=<FIXME: your router id> weight=1000.0
+
+# Cache everything
+FetchUselessDescriptors 1
+DownloadExtraInfo 1
+# This is obsolete, but the code still exists and increases the attack surface
+# But it's unlikely many caches will have this set, as it is off by default
+#FetchV2Networkstatus 1
+
+# As we're testing different domains, log domains with each message
+LogMessageDomains 1
+# Don't hide log times
+LogTimeGranularity 1
+# Don't hide sensitive strings
+SafeLogging 0
+# As we're testing, we want to know when tor knows we have broken the rules
+ProtocolWarnings 1
+# Make sure we find out if tor's internal event loop dies
+HeartbeatPeriod 1 minutes
+
+# Log stats, even the useless ones
+CellStatistics 1
+DirReqStatistics 1
+EntryStatistics 1
+ExitPortStatistics 1
+ConnDirectionStatistics 1
+ExtraInfoStatistics 1
+
+# These options change tor's attack surface: test all, but test defaults first
+#TunnelDirConns 0
+#PreferTunneledDirConns 0
+
+# These options change tor's responses to attacks by changing crypto handling
+# test both, but test default first 
+#HardwareAccel 1
+#AccelName NAME
+#AccelDir DIR
+
+# These options might change tor's responses to attacks 
+# by changing IP processing
+# test both, but test with them disabled first
+#GeoIPFile /test/tor/tor-features-data/geoip
+#GeoIPv6File /test/tor/tor-features-data/geoip6
+
+# These options might change tor's responses to attacks 
+# by changing memory/net usage
+# test all, but test defaults first
+#AvoidDiskWrites 1
+#MaxMemInCellQueues ?MB
+
+# This option might change tor's attack surface by introducing race conditions
+# test multiple, but test default first
+#NumCPUs 4
+
+
+# Allow tor to be debugged, and to dump core
+DisableDebuggerAttachment 0
+
+# Assume we know what we're doing when we send a SIGINT / shutdown
+ShutdownWaitLength 0
+
+
+# Disable everything except directory caching
+PublishServerDescriptor 0
+
+SOCKSPort 0
+ORPort 0
+TransPort 0
+NATDPort 0
+DNSPort 0
+# For some reason, this actually creates a cookie for the extended OR port
+#ExtORPort 0
+
+ExitPolicy reject *:*
