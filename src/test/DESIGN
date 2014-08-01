@@ -7,32 +7,6 @@ Design for Tor Fuzzer
 1A1. Expected or Unexpected request
 	i.e. would a client typically generate a request like this?
 
-From Tor’s dir-spec.txt Appendix B:
-
-Format:
-
-"Fingerprints" in these URLs are base16-encoded SHA1 hashes.
-(NOTE: Due to squid proxy url limitations at most 96 fingerprints can be retrieved in a single request.)
-
-The fingerprints can be shortened to a length of any multiple of
-two, using only the leftmost part of the encoded fingerprint.  Tor uses
-3 bytes (6 hex characters) of the fingerprint.
-
-Clients SHOULD sort the fingerprints in ascending order.  Server MUST
-accept any order.
-
-Clients SHOULD use upper case letters (A-F) when base16-encoding fingerprints. Servers MUST accept both upper and lower case fingerprints in requests.
-
-Microdescriptor hashes are base64 encoded with trailing =s 
-omitted for size and for
-consistency with the microdescriptor consensus format.  -s are used
-instead of +s to separate items, since the + character is used in
-base64 encoding.
-
-(NOTE: Due to squid proxy url limitations at most 92 microdescriptor hashes
-can be retrieved in a single request.)
-
-
 1A2. Missing or Additional Fields
 
 1A3. Formats / Character classes used in fuzzing
@@ -49,6 +23,9 @@ From Tor’s dir-spec.txt Appendix B:
 The fingerprints can be shortened to a length of any multiple of
 two, using only the leftmost part of the encoded fingerprint.  Tor uses
 3 bytes (6 hex characters) of the fingerprint.
+
+Clients SHOULD sort the fingerprints in ascending order.  Server MUST
+accept any order.
 
 Clients SHOULD use upper case letters (A-F) when base16-encoding fingerprints. Servers MUST accept both upper and lower case fingerprints in requests.
 
@@ -77,7 +54,7 @@ All directory information is uploaded and downloaded with HTTP.
 1A5a. Content-Length: <byte count> (May)
 1A5b. Content-Encoding: < deflate | identity > (Should)
 
-Compression:
+From Tor’s dir-spec.txt Appendix B:
 
 Clients MUST handle compressed concatenated information in two forms:
   - A concatenated list of zlib-compressed objects.
@@ -121,6 +98,7 @@ Note: this could be interesting to test…
 1A9. Methods / URLs
 1A9a. GET
 
+From Tor’s dir-spec.txt Appendix B:
 
 Retrieving from Directory Caches:
 
@@ -253,7 +231,6 @@ Consensus Signature (Detached):
 http://<hostname>/tor/post/consensus-signature
 
 1A9c. Others?
-
 
 
 1B. Limits on fuzzing
