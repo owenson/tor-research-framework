@@ -20,12 +20,9 @@ From Tor’s dir-spec.txt Appendix B:
 "Fingerprints" in these URLs are base16-encoded SHA1 hashes.
 (NOTE: Due to squid proxy url limitations at most 96 fingerprints can be retrieved in a single request.)
 
-The fingerprints can be shortened to a length of any multiple of
-two, using only the leftmost part of the encoded fingerprint.  Tor uses
-3 bytes (6 hex characters) of the fingerprint.
+The fingerprints can be shortened to a length of any multiple of two, using only the leftmost part of the encoded fingerprint.  Tor uses 3 bytes (6 hex characters) of the fingerprint.
 
-Clients SHOULD sort the fingerprints in ascending order.  Server MUST
-accept any order.
+Clients SHOULD sort the fingerprints in ascending order.  Server MUST accept any order.
 
 Clients SHOULD use upper case letters (A-F) when base16-encoding fingerprints. Servers MUST accept both upper and lower case fingerprints in requests.
 
@@ -35,8 +32,7 @@ consistency with the microdescriptor consensus format.  -s are used
 instead of +s to separate items, since the + character is used in
 base64 encoding.
 
-(NOTE: Due to squid proxy url limitations at most 92 microdescriptor hashes
-can be retrieved in a single request.)
+(NOTE: Due to squid proxy url limitations at most 92 microdescriptor hashes can be retrieved in a single request.)
 
 1A3c. Incorrect but Similar
 	i.e. break the boundaries of the spec
@@ -198,11 +194,6 @@ Consensus Signature (Detached):
 
 http://<hostname>/tor/status-vote/next/consensus-signatures.z
 http://<hostname>/tor/status-vote/current/consensus-signatures.z
-
-Consensus Flavors:
-
-http://<hostname>/tor/status-vote/(current|next)/consensus-F.z. and
-http://<hostname>/tor/status-vote/(current|next)/consensus-F/<FP1>+....z.
 
 
 1A9b. POST
