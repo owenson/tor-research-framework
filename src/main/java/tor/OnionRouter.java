@@ -224,8 +224,13 @@ public class OnionRouter {
 
     @Override
     public String toString() {
+        return toString(false);
+    }
+
+    public String toString(boolean resolveHostname) {
+        if(resolveHostname)
+            ip.getHostName();
         return "OnionRouter [name=" + name + ", ip=" + ip + ", orport="
                 + orport + ", identityhash=" + identityhash + "]";
     }
-
 }
