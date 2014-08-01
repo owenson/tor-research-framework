@@ -44,7 +44,8 @@ public class TorSocket {
     SSLSocket sslsocket;
     OutputStream out;
     InputStream in;
-    public int PROTOCOL_VERSION = 3; // auto negotiated later
+    public int PROTOCOL_VERSION = 3; // auto negotiated later - this is minimum value supported.
+    private int PROTOCOL_VERSION_MAX = 4; // max protocol version supported
 
     OnionRouter firstHop; // e.g. hop connected to
 
@@ -146,7 +147,7 @@ public class TorSocket {
                     case Cell.NETINFO:
                         sendNetInfo();
                         setState(STATES.READY);
-                        break;
+                        continue;
                 }
                 TorCircuit circ = circuits.get(new Integer(c.circId));
                 if (circ == null || !circ.handleCell(c))
@@ -233,7 +234,7 @@ public class TorSocket {
         ByteBuffer verBuf = ByteBuffer.wrap(versionReply.payload);
         for (int i = 0; i < versionReply.payload.length; i+=2) {
             int offeredVer = verBuf.getShort();
-            if(offeredVer <=4 && offeredVer > PROTOCOL_VERSION)
+            if(offeredVer <= PROTOCOL_VERSION_MAX && offeredVer > PROTOCOL_VERSION)
                 PROTOCOL_VERSION = offeredVer;
         }
         System.out.println("Negotiated protocol vesrsion: "+PROTOCOL_VERSION);
