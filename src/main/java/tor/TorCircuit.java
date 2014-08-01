@@ -92,6 +92,9 @@ public class TorCircuit {
 
     public TorCircuit(TorSocket sock) {
         circId = circId_counter++;
+        // in proto version 4 or higher, the MSB bit of the circId must be one for the initiator (aka, us).
+        if(sock.PROTOCOL_VERSION >= 4)
+            circId |= 0x80000000;
         this.sock = sock;
     }
 

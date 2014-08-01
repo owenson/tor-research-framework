@@ -53,17 +53,20 @@ public class Cell {
     }
 
     // prepare for sending
-    public byte[] getBytes() {
+    public byte[] getBytes(int protocolVersion) {
         byte cell[];
 
         if (cmdId == 7 || cmdId >= 128)
-            cell = new byte[3 + 2 + payload.length];
+            cell = new byte[(protocolVersion<4?3:5) + 2 + payload.length];
         else
-            cell = new byte[512];
+            cell = new byte[protocolVersion<4?512:514];
 
         ByteBuffer buf = ByteBuffer.wrap(cell);
         buf.order(ByteOrder.BIG_ENDIAN);
-        buf.putShort((short) circId);
+        if(protocolVersion<4)
+            buf.putShort((short) circId);
+        else
+            buf.putInt(circId);
         buf.put((byte) cmdId);
 
         if (cmdId == 7 || cmdId >= 128)
