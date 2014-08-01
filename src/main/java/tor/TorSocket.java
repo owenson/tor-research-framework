@@ -44,6 +44,8 @@ public class TorSocket {
     SSLSocket sslsocket;
     OutputStream out;
     InputStream in;
+    public int PROTOCOL_VERSION = 3; // auto negotiated later - this is minimum value supported.
+    private int PROTOCOL_VERSION_MAX = 4; // max protocol version supported
 
     OnionRouter firstHop; // e.g. hop connected to
 
@@ -69,30 +71,31 @@ public class TorSocket {
      */
     public void sendCell(int circid, int cmd, byte[] payload)
             throws IOException {
-        out.write(new Cell(circid, cmd, payload).getBytes());
+        out.write(new Cell(circid, cmd, payload).getBytes(PROTOCOL_VERSION));
     }
 
     public void sendCell(Cell c)
             throws IOException {
 
-        out.write(c.getBytes());
+        out.write(c.getBytes(PROTOCOL_VERSION));
     }
 
     private byte[] blockingRead(int length) throws IOException {
         return IOUtils.readFully(in, length, true);
     }
 
-    /**
-     * Receive a cell from the socket and decode it into a Cell object
-     *
-     * @return Cell object
-     */
     public Cell recvCell() throws IOException {
-        byte hdr[] = blockingRead(3);
+        byte hdr[] = blockingRead(PROTOCOL_VERSION == 3 ? 3: 5);
 
         ByteBuffer buf = ByteBuffer.wrap(hdr);
         buf.order(ByteOrder.BIG_ENDIAN);
-        int circid = buf.getShort();
+
+        int circid = 0;
+        if(PROTOCOL_VERSION < 4)
+            circid = buf.getShort();
+        else
+            circid = buf.getInt();
+
         int cmdId = buf.get() & 0xff;
         int pllength = 509;
 
@@ -103,6 +106,7 @@ public class TorSocket {
         byte payload[] = blockingRead(pllength);
 
         return new Cell(circid, cmdId, payload);
+
     }
 
     /**
@@ -143,7 +147,7 @@ public class TorSocket {
                     case Cell.NETINFO:
                         sendNetInfo();
                         setState(STATES.READY);
-                        break;
+                        continue;
                 }
                 TorCircuit circ = circuits.get(new Integer(c.circId));
                 if (circ == null || !circ.handleCell(c))
@@ -223,15 +227,24 @@ public class TorSocket {
         out = sslsocket.getOutputStream();
         in = sslsocket.getInputStream();
 
+
+        // versions cell
+        sendCell(0, Cell.VERSIONS, new byte[]{00, 03, 00, 04});
+        Cell versionReply = recvCell();
+        ByteBuffer verBuf = ByteBuffer.wrap(versionReply.payload);
+        for (int i = 0; i < versionReply.payload.length; i+=2) {
+            int offeredVer = verBuf.getShort();
+            if(offeredVer <= PROTOCOL_VERSION_MAX && offeredVer > PROTOCOL_VERSION)
+                PROTOCOL_VERSION = offeredVer;
+        }
+        System.out.println("Negotiated protocol vesrsion: "+PROTOCOL_VERSION);
+
         new Thread(new Runnable() {
             @Override
             public void run() {
                 receiveHandlerLoop();
             }
         }).start();
-
-        // versions cell
-        sendCell(0, Cell.VERSIONS, new byte[]{00, 03});
 
         while (state != STATES.READY) {
             synchronized (stateNotify) {

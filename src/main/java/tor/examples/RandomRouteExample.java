@@ -39,14 +39,21 @@ public class RandomRouteExample {
         //TorSocket sock = new TorSocket(con.getRouterByName("turtles"));
         TorCircuit circ = sock.createCircuit(true);
 
+        System.out.println("\n===================");
+        System.out.println("Creating to first hop");
         circ.create();
+        System.out.println("\n===================");
+        System.out.println("Extending to middle");
         circ.extend(con.getRandomORWithFlag("Running,Valid"));
+
+        System.out.println("\n=================");
+        System.out.println("Extending to exit");
         circ.extend(con.getRandomORWithFlag("Exit,Running,Valid".split(","), 80));
-        //circ.createRoute("Snowden4ever,abbie");
 
         TorStream stream = circ.createStream("ghowen.me", 80, null);
         stream.waitForState(TorStream.STATES.READY);
 
+        System.out.println("\n====================================");
         System.out.println("Connected to remote host through Tor");
         stream.sendHTTPGETRequest("/ip", "ghowen.me");
 

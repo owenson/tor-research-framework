@@ -160,8 +160,7 @@ public class Consensus {
             try {
                 URL zurl = new URL("http://" + address + ":" + port + path + ".z");
                 System.out.println("Downloading: " + zurl.toString());
-                InflaterInputStream infl = new InflaterInputStream(zurl.openStream());
-                return infl;
+                return new InflaterInputStream(zurl.openStream());
             } catch (IOException e) {
                 System.out.println("Transparent download of compressed stream failed, falling back to uncompressed."
                         + " Exception: " + e.toString());
@@ -170,6 +169,8 @@ public class Consensus {
 
         System.out.println("Downloading: " + url.toString());
         InputStream in = url.openStream();
+        if(path.endsWith(".z"))
+            return new InflaterInputStream(in);
         return in;
     }
 
@@ -203,13 +204,14 @@ public class Consensus {
             if (consensusReader == null) { // if not using cached-consensus
                 System.out.println("No valid cached consensus - fetching.");
                 InputStream conStream = getDirectoryStream("/tor/status-vote/current/consensus.z");
-                consensusReader = new BufferedReader(new InputStreamReader(new InflaterInputStream(conStream)));
+                consensusReader = new BufferedReader(new InputStreamReader(conStream));
                 if (new File(".").canWrite()) // can write to current directory?
                     cachedConsensusWriter = new PrintWriter(cachedConsensus);
             }
 
+            // now go ahead and parse the consensus
             String ln = null;
-            OnionRouter cur = null;
+            OnionRouter cur = null; // set after each router line to refer to current router
             while ((ln = consensusReader.readLine()) != null) {
                 if (cachedConsensusWriter != null) // if getting new consensus then save to disk!
                     cachedConsensusWriter.println(ln);
@@ -219,19 +221,20 @@ public class Consensus {
                     consensusValidUntil = df.parse(ln.substring(idx + 1) + " GMT");
                 }
 
-                if (ln.startsWith("r")) {
+                if (ln.startsWith("r")) { // router line
                     String dat[] = ln.split(" ");
                     if (dat.length < 8)
                         continue;
+
                     String identityhex = Hex.encodeHexString(Base64.decodeBase64(dat[2]));
                     cur = new OnionRouter(dat[1], identityhex, dat[6], Integer.parseInt(dat[7]), Integer.parseInt(dat[8]));
 
                     routers.put(identityhex, cur);
-                } else if (ln.startsWith("s") && cur != null) {
+                } else if (ln.startsWith("s") && cur != null) {  // flags line
                     for (String s : ln.split(" "))
                         if (!s.equals("s"))
                             cur.flags.add(s);
-                } else if (ln.startsWith("p") && cur != null) {
+                } else if (ln.startsWith("p") && cur != null) {  // exit policy line
                     // "p" SP ("accept" / "reject") SP PortList NL
                     String[] lineSplit = ln.split(" ");
 
