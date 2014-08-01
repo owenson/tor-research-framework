@@ -1,0 +1,41 @@
+Design for Tor Fuzzer
+
+1. Configure the kind of fuzzing desired
+
+1A. Character classes used in fuzzing
+
+1A1. Expected or Unexpected request
+	i.e. would a client use/want the response to a request like this?
+
+1A2. Missing or Additional Fields
+
+1A3. Character classes used in fuzzing
+1A3a. Canonical/Naive
+	i.e. a programmer’s first cut at the spec
+1A3b. Correct
+	i.e. push the boundaries of the spec
+1A3c. Incorrect but Similar
+	i.e. break the boundaries of the spec
+1A3d. Random
+	i.e. what spec?
+
+1B. Limits on fuzzing
+1B1. Time
+1B2. Storage
+1B3. Iterations
+1B4. Errors
+
+2. Generate request / document
+3. Save by hash
+4. Log by time
+5. Send to victim 
+
+6. Handle response
+6A. Record response
+6B. Handle failures:
+6B1. Restart if it dies
+6B2. SIGHUP/restart if it doesn’t answer
+6B3. ? if it produces bad response
+6C. Re-run previous request(s) to ensure reproducibility
+
+7. Rinse, Lather, and Repeat from Step 1
