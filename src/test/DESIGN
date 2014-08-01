@@ -2,7 +2,7 @@ Design for Tor Fuzzer
 
 1. Configure the kind of fuzzing desired
 
-1A. Character classes used in fuzzing
+1A. Request configuration
 
 1A1. Expected or Unexpected request
 	i.e. would a client use/want the response to a request like this?
