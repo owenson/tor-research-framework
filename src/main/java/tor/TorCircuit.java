@@ -233,7 +233,7 @@ public class TorCircuit {
     /**
      * Wraps data in onion skins for sending down circuit
      *
-     * @param data Data to wrap/encypr
+     * @param data Data to wrap/encrypt
      * @return Wrapped/encrypted data
      */
     private byte[] encrypt(byte[] data) {

@@ -69,7 +69,6 @@ public class OnionRouter {
         else if (exitPort < 0 || exitPort > 65535)
             return true;
 
-
         if (parsedIPv4ExitPortList == null) {
 
             // if we don't have the p line from the consensus, download the entire router descriptor
