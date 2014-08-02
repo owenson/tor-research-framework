@@ -62,7 +62,7 @@ Clients MUST handle compressed concatenated information in two forms:
 Directory servers MAY generate either format: the former requires less
 CPU, but the latter requires less bandwidth.
 
-Note: this could be interesting to test…
+Note: this appears to work flawlessly in Java
 
 1A5c. X-Your-Address-Is: < a.b.c.d > (May)
 1A5c1. Tunnelled over BEGIN_DIR: 
