@@ -1,5 +1,9 @@
 Design for Tor Fuzzer
 
+Tim Wilson-Brown, July 2014
+Based on tor-research-framework by Dr Gareth Owen
+Based on the Tor directory specification
+
 1. Configure the kind of fuzzing desired
 
 1A. Request configuration

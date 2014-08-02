@@ -1,3 +1,9 @@
+Tor Directory URL Specification
+
+Tim Wilson-Brown, July 2014
+Based on tor-research-framework by Dr Gareth Owen
+Based on the Tor directory specification
+
 Definitions:
 # ASCII characters defined in hex
 SP = 0x20
