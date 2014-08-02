@@ -84,15 +84,24 @@ Z = “.z”
 PLUS = “+”
 
 HEX_BYTE_TEXT = “00” - “FF” | “00” - “ff”
-# 6 uppercase characters is canonical
-FINGERPRINT = ( HEX_BYTE_TEXT ){1-20}
+# Only for requesting consensuses via an authority
+# 6 uppercase characters (3 bytes) is canonical
+AUTH_FP = ( HEX_BYTE_TEXT ){1-20}
+FINGERPRINT = ( HEX_BYTE_TEXT ){20}
 
 # A server (router or authority) identity key fingerprint
 ID_FP = FINGERPRINT
 # Due to squid proxy url limitations 
 # at most 96 fingerprints (6-character?)
 # can be retrieved in a single request.
+# The non-proxy limit actually around 1300.
 ID_LIST = ID_FP ( PLUS ID_FP ){0-95}
+
+# There are no specific limits placed on this
+# But in reality, there are 10-15 authorities
+# What about duplicate IDs? With different lengths?
+# What about identical byte patterns?
+AUTH_LIST = AUTH_FP ( PLUS AUTH_FP )*
 
 DASH = “-“
 
@@ -107,13 +116,13 @@ STATUS_BASE_URL = TOR_BASE_URL “status-vote” SLASH STATUS SLASH
 STATUS_BASE_URL “consensus” [ Z ]
 # Servers will only return a consensus if more than half of the requested
 # authorities have signed the document, otherwise a 404 error
-STATUS_BASE_URL “consensus” SLASH ID_LIST [ Z ]
+STATUS_BASE_URL “consensus” SLASH AUTH_LIST [ Z ]
 STATUS_BASE_URL “consensus” DASH FLAVOR [ Z ]
-STATUS_BASE_URL “consensus” DASH FLAVOR SLASH ID_LIST [ Z ]
+# It's not clear from the spec, but AUTH_LIST makes sense here
+STATUS_BASE_URL “consensus” DASH FLAVOR SLASH AUTH_LIST [ Z ]
 
 
 # The spec is ambiguous here:
-# Can we truncate the digests (like ID_FP), or not?
 # How many digests are permitted? (due to squid?)
 SIG_DIGEST = ( HEX_BYTE_TEXT ){20}
 SIG_DIGEST_LIST = SIG_DIGEST ( PLUS SIG_DIGEST ){0-??}
