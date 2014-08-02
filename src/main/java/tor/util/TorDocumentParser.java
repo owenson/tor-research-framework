@@ -33,14 +33,14 @@ import java.util.TreeMap;
 public class TorDocumentParser {
     public TreeMap<String, String> map = new TreeMap<>();
 
-    // prduces a map from a normal tor document, key/value pairs
+    // produces a map from a normal tor document, key/value pairs
     // parses block BEGIN-ENDS correctly
     // where same key appears twice, value is the concatenated values with | as a delimiter
 
     // the order of the IPv4 accept/reject exit policies matters, and this order is destroyed by the parser
     // we therefore substitute a synthesised key for accept/reject lines ("ipv4-policy" like the ipv6-policy key),
     // and we prepend accept or reject to each line, using space as a second-level separator
-    // i.e. accept 80|reject *:*
+    // i.e. accept *:80|reject *:*
     public final static String IPv4PolicyKey = "ipv4-policy";
 
     private static TreeMap<String, String> keyReplacementMap;
