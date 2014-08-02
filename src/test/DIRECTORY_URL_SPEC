@@ -1,3 +1,9 @@
+Tor Directory URL Specification
+
+Tim Wilson-Brown, July 2014
+Based on tor-research-framework by Dr Gareth Owen
+Based on the Tor directory specification
+
 Definitions:
 # ASCII characters defined in hex
 SP = 0x20
@@ -61,14 +67,17 @@ HTTP_DATE = <One of the following:>
 # The If-Modified-Since header is often used by Tor
 IF_MOD_SINCE = “If-Modified-Since” COLON WS HTTP_DATE
 
-# <Download URL> is anything in this section
-# that isn’t a definition (i.e. that isn’t a = b)
+# <Download Path> is the path portion of any URL listed below
+# (i.e. anything that is not a definition [definitions contain ‘=‘ ])
 # HTTP 0.9 only supports GET, and has no version
-DL_HTTP_09 = GET_METHOD WS <Download URL> CRLF
-DL_HTTP_10 = DOWNLOAD_METHOD WS <Download URL> WS HTTP_VERSION CRLF CRLF
-DL_CONDITIONAL = GET_METHOD WS <Download URL> WS HTTP_VERSION CRLF \
+DL_HTTP_09 = GET_METHOD WS <Download Path> CRLF
+DL_HTTP_10 = DOWNLOAD_METHOD WS <Download Path> WS HTTP_VERSION CRLF CRLF
+DL_CONDITIONAL = GET_METHOD WS <Download Path> WS HTTP_VERSION CRLF \
 			IF_MOD_SINCE CRLF CRLF
-DOWNLOAD = ( DL_HTTP_09 | DL_HTTP_10 | DL_CONDITIONAL )
+
+# To download, connect to the host and port (default 80) specified in the URL
+# Then issue the DOWNLOAD_COMMAND
+DOWNLOAD_COMMAND = ( DL_HTTP_09 | DL_HTTP_10 | DL_CONDITIONAL )
 
 Z = “.z”
 
@@ -183,15 +192,23 @@ STATUS_BASE_URL “consensus-signatures” [ Z ]
 Submission to Authorities: (Upload URLs)
 
 CONTENT_LENGTH = “Content-Length” COLON WS ( “0” - “9” ) +
-CONTENT_ENCODING = “Content-Encoding” COLON WS ( “deflate" | "identity" )
+CONTENT_ENCODING = “Content-Encoding” COLON WS ( “deflate" | "identity" | ? )
 
-# <Upload URL> is anything in this section that isn’t a definition (i.e. that isn’t a = b)
+# TODO: the upload data may need to be encoded
+UPLOAD_DATA = ( OCTET ) *
+
+# <Upload Path> is the path portion of any URL listed below
+# (i.e. anything that is not a definition [definitions contain ‘=‘ ])
 # POST is only permitted in HTTP 1.0+, which must have an HTTP_VERSION
 # Is CONTENT_ENCODING required by tor in POST requests?
-# Can we encode descriptors using deflate? (Or base64?) 
-UPLOAD = UPLOAD_METHOD WS <Upload URL> WS HTTP_VERSION CRLF \
+# Can we encode descriptors using deflate? (Or base64?)
+
+# To upload, connect to the host and port (default 80) specified in the URL
+# Then issue the UPLOAD_COMMAND
+UPLOAD_COMMAND = UPLOAD_METHOD WS <Upload Path> WS HTTP_VERSION CRLF \
 		CONTENT_LENGTH CRLF \
-		[ CONTENT_ENCODING CRLF ] CRLF
+		[ CONTENT_ENCODING CRLF ] CRLF \
+		UPLOAD_DATA
 
 # Descriptors
 TOR_BASE_URL
