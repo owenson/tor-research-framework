@@ -235,8 +235,19 @@ http://<hostname>/tor/post/consensus-signature
 1B4. Errors
 
 2. Generate request / document
-3. Save by hash
-4. Log by time
+3. Save:
+3A. http_request (encoded/decoded)
+3B. http_response
+3C. stdout
+3D. stderr
+
+4. File Name & Directory Structure
+4A. Name by date & time
+4B. Directory Name by result/error
+4B1. Success/Result Size Range(?)
+4B2. Internal Check Failure/Name
+4B3. HTTP Error/Code
+4B4. Java Exception/Name
 
 5. Send to victim 
 
