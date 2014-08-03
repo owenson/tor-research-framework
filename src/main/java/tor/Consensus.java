@@ -35,8 +35,10 @@ import java.util.TreeMap;
 import java.util.zip.InflaterInputStream;
 
 public class Consensus {
+
     // The maximum number of connection tries to directory caches before falling back to authorities
-    public final static int MAX_TRIES = 10;
+    // TODO: we could do this much better with a setter method - on the class or object?
+    public static int MAX_TRIES = 10;
 
     /**
      * Whether to use only the directory authorities to fetch the consensus and router descriptors?
@@ -402,7 +404,37 @@ public class Consensus {
         return ors[idx];
     }
 
+    /**
+     * Query a random directory (cache) for the router descriptor(s) corresponding to hash
+     *
+     * @param hash           the routers' fingerprint hash(es), separated by "+"
+     * @return the descriptor(s) downloaded from a random directory (cache)
+     */
     public String getRouterDescriptor(String hash) throws IOException {
         return IOUtils.toString(getDirectoryStream("/tor/server/fp/" + hash));
+    }
+
+    /**
+     * Query the specified directory for the router descriptor(s) corresponding to hash
+     *
+     * @param hash           the routers' fingerprint hash(es), separated by "+"
+     * @param address        a String containing the DNS name or IP address for the directory (cache)
+     * @param port           a String containing the port for the directory (cache)
+     * @return the descriptor(s) downloaded from the specified directory (cache)
+     */
+    public String getRouterDescriptor(String hash, String address, String port) throws IOException {
+        return IOUtils.toString(connectToDirectoryStream(address, port, "/tor/server/fp/" + hash));
+    }
+
+    /**
+     * Query the specified directory for the router descriptor(s) corresponding to hash
+     *
+     * @param hash           the routers' fingerprint hash(es), separated by "+"
+     * @param address        the InetAddress for the directory (cache)
+     * @param port           the int port for the directory (cache)
+     * @return the descriptor(s) downloaded from the specified directory (cache)
+     */
+    public String getRouterDescriptor(String hash, InetAddress address, int port) throws IOException {
+        return IOUtils.toString(connectToDirectoryStream(address, port, "/tor/server/fp/" + hash));
     }
 }

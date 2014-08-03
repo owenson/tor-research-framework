@@ -69,7 +69,8 @@ IF_MOD_SINCE = “If-Modified-Since” COLON WS HTTP_DATE
 
 # <Download Path> is the path portion of any URL listed below
 # (i.e. anything that is not a definition [definitions contain ‘=‘ ])
-# HTTP 0.9 only supports GET, and has no version
+# HTTP 0.9 only supports GET, and has no version.
+# Even though 0.9 is part of the HTTP 1.0 spec, tor doesn’t seem to support it.
 DL_HTTP_09 = GET_METHOD WS <Download Path> CRLF
 DL_HTTP_10 = DOWNLOAD_METHOD WS <Download Path> WS HTTP_VERSION CRLF CRLF
 DL_CONDITIONAL = GET_METHOD WS <Download Path> WS HTTP_VERSION CRLF \
@@ -219,9 +220,10 @@ UPLOAD_COMMAND = UPLOAD_METHOD WS <Upload Path> WS HTTP_VERSION CRLF \
 		[ CONTENT_ENCODING CRLF ] CRLF \
 		UPLOAD_DATA
 
-# Descriptors
+# Descriptors post to the base URL “/tor/“
+# It has a terminating slash, the other post URLs don’t
 TOR_BASE_URL
 # Authority Votes
-TOR_BASE_URL “post” SLASH “vote
+TOR_BASE_URL “post” SLASH “vote”
 # Authority Detached Signatures
 TOR_BASE_URL “post” SLASH “consensus-signature”
