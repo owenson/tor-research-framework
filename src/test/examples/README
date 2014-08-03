@@ -1,0 +1,22 @@
+The files in this directory contain non-printing bytes.
+They may cause issues with your terminal when displayed.
+Editing them may destroy or convert the data they contain.
+
+In order to replay these requests, you may need the following tools:
+ * netcat (nc) or a similar raw network program
+   - I've successfully used "nc localhost 8880 < file"
+   - and "nc -c localhost 8880" interactively
+ * unix2dos, as HTTP requires CRLF line endings
+ * a URL encoder and decoder (i.e. util/URLUtil.java or a similar script)
+   - This will assist with generating correct binary output from fuzzer output
+   - A simple python script is:
+
+       import sys, urllib as ul; 
+       for line in sys.stdin:
+       	   print ul.quote_plus(line)
+# or, for decoding:
+      	   print ul.unquote_plus(line)
+
+Combining these techniques leads to command-lines like this:
+cat sample.http.encoded | urldecode | unix2dos > sample.http
+nc localhost 8880 < sample.http

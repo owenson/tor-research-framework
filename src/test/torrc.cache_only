@@ -12,6 +12,10 @@ Address 127.0.0.1
 ContactInfo <FIXME: insert email to be notified of misconfigurations>
 Nickname LocalDirCacheTest
 
+# For arm or Vidalia
+CookieAuthentication 1
+ControlPort 127.0.0.1:8890
+
 # Test against the least secure version, then re-test on the others
 DataDirectory /test/tor/tor-features-data
 #DataDirectory /test/tor/tor-default-data
