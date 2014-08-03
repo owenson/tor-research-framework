@@ -20,11 +20,11 @@ package tor;
 
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import sun.misc.IOUtils;
+import tor.util.TrustAllManager;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -33,8 +33,6 @@ import java.nio.ByteOrder;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.Security;
-import java.security.cert.CertificateException;
-import java.security.cert.X509Certificate;
 import java.util.TreeMap;
 
 public class TorSocket {
@@ -45,7 +43,7 @@ public class TorSocket {
     OutputStream out;
     InputStream in;
     public int PROTOCOL_VERSION = 3; // auto negotiated later - this is minimum value supported.
-    private int PROTOCOL_VERSION_MAX = 4; // max protocol version supported
+    protected int PROTOCOL_VERSION_MAX = 4; // max protocol version supported
 
     OnionRouter firstHop; // e.g. hop connected to
 
@@ -172,6 +170,10 @@ public class TorSocket {
         return circ;
     }
 
+    public TorSocket() {
+
+    }
+
     /**
      * Main constructor. Connects and does connection setup.
      *
@@ -186,36 +188,11 @@ public class TorSocket {
             throw new RuntimeException("Couldn't find router ip in consensus");
 
         Security.addProvider(new BouncyCastleProvider());
-        // fake trust manager to accept all certs
-        TrustManager[] trustAllCerts = new TrustManager[]{new X509TrustManager() {
-
-            @Override
-            public void checkClientTrusted(X509Certificate[] chain,
-                                           String authType) throws CertificateException {
-                // TODO Auto-generated method stub
-
-            }
-
-            @Override
-            public void checkServerTrusted(X509Certificate[] chain,
-                                           String authType) throws CertificateException {
-                // TODO Auto-generated method stub
-
-            }
-
-            @Override
-            public X509Certificate[] getAcceptedIssuers() {
-                // TODO Auto-generated method stub
-                return null;
-            }
-
-        }};
-
         SSLContext sc;
 
         try {
             sc = SSLContext.getInstance("SSL");
-            sc.init(null, trustAllCerts, new java.security.SecureRandom());
+            sc.init(null, new TrustManager[] { new TrustAllManager() }, new java.security.SecureRandom());
         } catch (KeyManagementException | NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
         }
