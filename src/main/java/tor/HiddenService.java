@@ -142,6 +142,7 @@ public class HiddenService {
 
             // get HTTP response and body
             String data = IOUtils.toString(st.getInputStream());
+            circ.destroy();
 
             // HTTP success code
             if (data.length() < 1 || !data.split(" ")[1].equals("200")) {

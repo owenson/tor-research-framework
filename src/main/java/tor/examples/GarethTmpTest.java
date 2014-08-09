@@ -1,6 +1,7 @@
 package tor.examples;
 
-import tor.OnionRouter;
+import tor.Consensus;
+import tor.TorCircuit;
 import tor.TorSocket;
 
 import java.io.IOException;
@@ -24,6 +25,11 @@ public class GarethTmpTest {
 //        out.write(hsdsec);
 //        System.out.println(hsdsec);
         //TorServerSocket sock = new TorServerSocket(9001);
-        TorSocket sock = new TorSocket(new OnionRouter("local", "none", "127.0.0.1", 9001, 0));
+        //TorSocket sock = new TorSocket(new OnionRouter("local", "none", "127.0.0.1", 9001, 0));
+        Consensus con = Consensus.getConsensus();
+        TorSocket sock = new TorSocket(con.getRouterByName("Goblin500"));
+        TorCircuit circ = sock.createCircuit(true);
+        circ.create();
+        circ.extend(con.getRouterByName("CertifiedExtremist"));
     }
 }

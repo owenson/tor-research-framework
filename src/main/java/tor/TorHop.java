@@ -19,6 +19,8 @@ package tor;
         along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+import tor.util.TorCircuitException;
+
 import javax.crypto.Cipher;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
@@ -42,7 +44,7 @@ public class TorHop {
      * @param _kh KH for verification of correct KDF
      * @param _r  Router which this hop represents
      */
-    public TorHop(byte kdf[], byte _kh[], OnionRouter _r) {
+    public TorHop(byte kdf[], byte _kh[], OnionRouter _r) throws TorCircuitException {
         router = _r;
         ByteBuffer buf = ByteBuffer.wrap(kdf);
         buf.get(kh);
@@ -72,7 +74,7 @@ public class TorHop {
 
 
         if (!Arrays.equals(_kh, kh))
-            throw new RuntimeException("hop key setup failed");
+            throw new TorCircuitException("hop key setup failed to router: "+router);
 
         System.out.println("Hop added " + router);
     }

@@ -20,6 +20,7 @@ package tor;
 
 import org.apache.commons.lang.ArrayUtils;
 import org.bouncycastle.util.encoders.Hex;
+import tor.util.TorCircuitException;
 
 import java.io.IOException;
 import java.math.BigInteger;
@@ -306,7 +307,7 @@ public class TorCircuit {
      *
      * @param in Cell payload (e.g. handshake data)
      */
-    private void handleCreated(byte in[]) {
+    private void handleCreated(byte in[]) throws TorCircuitException {
         // other side's public key
         byte y_bytes[] = Arrays.copyOfRange(in, 0, TorCrypto.DH_LEN);
 
@@ -465,6 +466,8 @@ public class TorCircuit {
             }
 
             handled = true;
+        } else if (c.cmdId == Cell.RELAY_EARLY || c.cmdId == Cell.PADDING || c.cmdId == Cell.VPADDING) { // these are used in deanon attacks
+            throw new RuntimeException("WARNING**** cell CMD "+c.cmdId+" received in - Possible DEANON attack!!: Route: "+hops.toArray());
         } else if (c.cmdId == Cell.RELAY) // relay cell
         {
             // cell decrypt logic - decrypt from each hop in turn checking recognised and digest until success
@@ -523,6 +526,9 @@ public class TorCircuit {
             if (cellFromHop != hops.size() - 1)
                 System.out.println("CELL FROM INTERMEDIATE HOP " + cellFromHop);
             switch (cmd) {
+                case RELAY_DROP:
+                    throw new RuntimeException("WARNING**** _relay_ cell CMD DROP received - Possible DEANON attack!!: Route: "+hops.toArray());
+
                 case RELAY_COMMAND_INTRODUCE_ACK:
                     setState(STATES.INTRODUCED);
                     break;

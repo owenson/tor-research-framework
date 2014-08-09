@@ -21,12 +21,10 @@ package tor;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.io.IOUtils;
+import tor.util.TorDocumentParser;
 
 import java.io.*;
-import java.net.InetAddress;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.net.UnknownHostException;
+import java.net.*;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
@@ -163,6 +161,9 @@ public class Consensus {
                 URL zurl = new URL("http://" + address + ":" + port + path + ".z");
                 System.out.println("Downloading: " + zurl.toString());
                 return new InflaterInputStream(zurl.openStream());
+            } catch(SocketException e) {
+                System.out.println("Failed to connect: "+e);
+                throw e;
             } catch (IOException e) {
                 System.out.println("Transparent download of compressed stream failed, falling back to uncompressed."
                         + " Exception: " + e.toString());
@@ -174,6 +175,41 @@ public class Consensus {
         if(path.endsWith(".z"))
             return new InflaterInputStream(in);
         return in;
+    }
+
+    /**
+     * Fetch all router descriptors and add the keys to the OnionRouter objects
+     * This saves directory fetches if you're doing a lot of route building
+     * (normally this is done on a per router basis as required which is slow for lots of fetches)
+     *
+     * @throws IOException
+     */
+    public void fetchAllDescriptors() throws IOException {
+        BufferedReader in = new BufferedReader(new InputStreamReader(getDirectoryStream("/tor/server/all.z")));
+        String ln, descriptor="";
+
+        while(true){
+            ln = in.readLine();
+            if(ln == null || ln.startsWith("router ")) { // read a whole router descriptor
+                if(!descriptor.isEmpty()) { // parse it and extract keys
+                    TorDocumentParser tdp = new TorDocumentParser(descriptor);
+                    String fprint = tdp.getItem("fingerprint");
+                    if(fprint!=null) {
+                        String fp = fprint.replaceAll("\\s+", "").toLowerCase();
+                        OnionRouter or = consensus.routers.get(fp);
+                        if(or != null) {
+                            or.pubKeyraw = Base64.decodeBase64(tdp.getItem("onion-key"));
+                            or.pubKey = TorCrypto.asn1GetPublicKey(or.pubKeyraw);
+                        }
+                    }
+                }
+                descriptor = "";
+                if(ln == null)
+                    break;
+            }
+            descriptor+=ln + "\n";
+        }
+
     }
 
     private boolean fetchConsensus(boolean forceDownload) {
