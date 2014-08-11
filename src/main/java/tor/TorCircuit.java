@@ -81,6 +81,7 @@ public class TorCircuit {
     public STATES state = STATES.NONE;
     private Object stateNotify = new Object();
 
+
     // list of active streams for this circuit
     TreeMap<Integer, TorStream> streams = new TreeMap<>();
     // streams with packets to send
@@ -467,7 +468,7 @@ public class TorCircuit {
 
             handled = true;
         } else if (c.cmdId == Cell.RELAY_EARLY || c.cmdId == Cell.PADDING || c.cmdId == Cell.VPADDING) { // these are used in deanon attacks
-            throw new RuntimeException("WARNING**** cell CMD "+c.cmdId+" received in - Possible DEANON attack!!: Route: "+hops.toArray());
+            System.out.println("WARNING**** cell CMD "+c.cmdId+" received in - Possible DEANON attack!!: Route: "+hops.toArray());
         } else if (c.cmdId == Cell.RELAY) // relay cell
         {
             // cell decrypt logic - decrypt from each hop in turn checking recognised and digest until success
@@ -498,6 +499,7 @@ public class TorCircuit {
                     }
                 }
             }
+
             if (cellFromHop == -1) {
                 System.out.println("unrecognised cell - didn't decrypt");
                 return false;
@@ -512,85 +514,14 @@ public class TorCircuit {
                 return false;
             }
             int streamid = buf.getShort();
-            TorStream stream = streams.get(new Integer(streamid));
-
-            if (streamid > 0 && stream == null) {
-                System.out.println("invalid stream id " + streamid);
-                return false;
-            }
 
             int digest = buf.getInt();
             int length = buf.getShort();
             byte data[] = Arrays.copyOfRange(c.payload, 1 + 2 + 2 + 4 + 2, 1 + 2 + 2 + 4 + 2 + length);
 
-            if (cellFromHop != hops.size() - 1)
-                System.out.println("CELL FROM INTERMEDIATE HOP " + cellFromHop);
-            switch (cmd) {
-                case RELAY_DROP:
-                    throw new RuntimeException("WARNING**** _relay_ cell CMD DROP received - Possible DEANON attack!!: Route: "+hops.toArray());
+            // now pass cell off to handler function below
+            handled = handleRelayCell(cmd, streamid, cellFromHop, data);
 
-                case RELAY_COMMAND_INTRODUCE_ACK:
-                    setState(STATES.INTRODUCED);
-                    break;
-
-                case RELAY_COMMAND_RENDEZVOUS2:
-                    assert state == STATES.RENDEZVOUS_ESTABLISHED;
-                    handleCreated(data);
-                    setState(STATES.RENDEZVOUS_COMPLETE);
-                    break;
-
-                case RELAY_COMMAND_RENDEZVOUS_ESTABLISHED:
-                    setState(STATES.RENDEZVOUS_ESTABLISHED);
-                    break;
-
-                case RELAY_TRUNCATED:
-                    System.out.println("TRUNCATED CELL RECEIVED - Cannot handle yet! " + DESTROY_ERRORS[c.payload[0]]);
-                    for (int hi = hops.size() - 1; hi > cellFromHop; hi--) {
-                        System.out.println("removing hop " + hi + " from circ");
-                        hops.remove(hi);
-                    }
-
-                    throw new RuntimeException("see err above");
-                    //break;
-
-                case RELAY_EXTENDED: // extended
-                    handleCreated(data);
-
-                    if (!circuitToBuild.isEmpty()) { // needs extending further?
-                        boolean block = blocking;
-                        setBlocking(false);
-                        extend(circuitToBuild.removeFirst());
-                        setBlocking(block);
-                    } else
-                        setState(STATES.READY);
-                    break;
-                case RELAY_CONNECTED:
-                    if (stream != null)
-                        stream.notifyConnect();
-                    break;
-                case RELAY_SENDME:
-                    if (streamid == 0)
-                        sendWindow += 100;
-                    System.out.println("RELAY_SENDME circ " + circId + " Stream " + streamid + " cur window " + sendWindow);
-                    break;
-                case RELAY_DATA:
-                    if (state == STATES.READY)
-                        receiveWindow--;
-                    if (stream != null)
-                        stream._putRecved(data);
-                    break;
-                case RELAY_END:
-                    if (data[0] != 6)
-                        System.out.println("Remote stream closed with error code " + STREAM_ERRORS[data[0]]);
-                    if (stream != null) {
-                        stream.notifyDisconnect();
-                        streams.remove(new Integer(streamid));
-                    }
-                    break;
-                default:
-                    System.out.println("unknown relay cell cmd " + cmd);
-            }
-            handled = true;
         } else if (c.cmdId == Cell.DESTROY) {
             System.out.println("Circuit destroyed " + circId);
             System.out.println("Reason: " + DESTROY_ERRORS[c.payload[0]]);
@@ -602,6 +533,99 @@ public class TorCircuit {
         }
 
         return handled;
+    }
+
+    /***
+     * Handles a decrypted relay cell
+     *
+     * @param cmdId RELAY_* command ID
+     * @param streamId Stream ID
+     * @param fromHop Received from which hop in circuit, e.g., 0,1,2..
+     * @param payload Decrypted payload
+     * @return whether handled or not
+     *
+     * @throws IOException
+     */
+    public boolean handleRelayCell(int cmdId, int streamId, int fromHop, byte[] payload) throws IOException {
+        TorStream stream = streams.get(new Integer(streamId));
+
+        if (streamId > 0 && stream == null) {
+            System.out.println("invalid stream id " + streamId);
+            return false;
+        }
+
+        if (fromHop != hops.size() - 1)
+            System.out.println("CELL FROM INTERMEDIATE HOP " + fromHop);
+
+        switch (cmdId) {
+            case RELAY_DROP:
+                System.out.println("WARNING**** _relay_ cell CMD DROP received - Possible DEANON attack!!: Route: "+hops.toArray());
+                break;
+
+            case RELAY_COMMAND_INTRODUCE_ACK:
+                setState(STATES.INTRODUCED);
+                break;
+
+            case RELAY_COMMAND_RENDEZVOUS2:
+                assert state == STATES.RENDEZVOUS_ESTABLISHED;
+                handleCreated(payload);
+                setState(STATES.RENDEZVOUS_COMPLETE);
+                break;
+
+            case RELAY_COMMAND_RENDEZVOUS_ESTABLISHED:
+                setState(STATES.RENDEZVOUS_ESTABLISHED);
+                break;
+
+            case RELAY_TRUNCATED:
+                System.out.println("TRUNCATED CELL RECEIVED - Cannot handle yet! " + DESTROY_ERRORS[payload[0]]);
+                for (int hi = hops.size() - 1; hi > fromHop; hi--) {
+                    System.out.println("removing hop " + hi + " from circ");
+                    hops.remove(hi);
+                }
+
+                throw new RuntimeException("see err above");
+                //break;
+
+            case RELAY_EXTENDED: // extended
+                handleCreated(payload);
+
+                if (!circuitToBuild.isEmpty()) { // needs extending further?
+                    boolean block = blocking;
+                    setBlocking(false);
+                    extend(circuitToBuild.removeFirst());
+                    setBlocking(block);
+                } else
+                    setState(STATES.READY);
+                break;
+            case RELAY_CONNECTED:
+                if (stream != null)
+                    stream.notifyConnect();
+                break;
+            case RELAY_SENDME:
+                if (streamId == 0)
+                    sendWindow += 100;
+                System.out.println("RELAY_SENDME circ " + circId + " Stream " + streamId + " cur window " + sendWindow);
+                break;
+            case RELAY_DATA:
+                if (state == STATES.READY)
+                    receiveWindow--;
+                if (stream != null)
+                    stream._putRecved(payload);
+                break;
+            case RELAY_END:
+                if (payload[0] != 6)
+                    System.out.println("Remote stream closed with error code " + STREAM_ERRORS[payload[0]]);
+                if (stream != null) {
+                    stream.notifyDisconnect();
+                    streams.remove(new Integer(streamId));
+                }
+                break;
+            default:
+                System.out.println("unknown relay cell cmd " + cmdId);
+                return false;
+        }
+        return true;
+
     }
 
 }

@@ -28,6 +28,7 @@ import javax.net.ssl.TrustManager;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.security.KeyManagementException;
@@ -46,6 +47,8 @@ public class TorSocket {
     protected int PROTOCOL_VERSION_MAX = 4; // max protocol version supported
 
     OnionRouter firstHop; // e.g. hop connected to
+
+    public Class defaultTorCircuitClass = TorCircuit.class;
 
     // circuits for this socket
     TreeMap<Integer, TorCircuit> circuits = new TreeMap<>();
@@ -164,7 +167,21 @@ public class TorSocket {
      * @return TorCircuit object
      */
     public TorCircuit createCircuit(boolean blocking) {
-        TorCircuit circ = new TorCircuit(this);
+        return createCircuit(defaultTorCircuitClass, blocking);
+    }
+
+    /**
+     * Creates a circuit using a custom TorCircuit class
+     *
+     * @return TorCircuit object
+     */
+    public <T extends TorCircuit> T createCircuit(Class<T> torCircClass, boolean blocking) {
+        T circ;
+        try {
+            circ = torCircClass.getDeclaredConstructor(TorSocket.class).newInstance(this);
+        } catch (InstantiationException  | IllegalAccessException | NoSuchMethodException | InvocationTargetException e) {
+            throw new RuntimeException(e);
+        }
         circ.setBlocking(blocking);
         circuits.put(circ.circId, circ);
         return circ;
