@@ -19,6 +19,8 @@
 package tor;
 
 import org.apache.commons.lang.ArrayUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.bouncycastle.util.encoders.Hex;
 import tor.util.TorCircuitException;
 
@@ -33,8 +35,10 @@ import java.util.TreeMap;
 
 public class TorCircuit {
 
+    final static Logger log = LogManager.getLogger();
+
     private static int circId_counter = 1;
-    int circId = 0;
+    long circId = 0;
 
     public static short streamId_counter = 1;
 
@@ -106,6 +110,7 @@ public class TorCircuit {
     }
 
     public void setState(STATES newState) {
+        log.trace("[Circ {}] New Circuit state {} (oldState {})", circId, newState, state);
         synchronized (stateNotify) {
             state = newState;
             stateNotify.notifyAll();
@@ -120,7 +125,7 @@ public class TorCircuit {
                 try {
                     stateNotify.wait();
                     if (state == STATES.DESTROYED && desired != STATES.DESTROYED)
-                        throw new IOException("Waiting for unreachable state - circuit destroyed");
+                        log.exit("Waiting for unreachable state - circuit destroyed");
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
@@ -137,8 +142,10 @@ public class TorCircuit {
      * @throws IOException
      */
     public void createRoute(String hopList) throws IOException {
-        if (state == STATES.DESTROYED)
+        if (state == STATES.DESTROYED) {
+            log.error("Trying to use destroyed circuit");
             throw new RuntimeException("Trying to use destroyed circuit");
+        }
 
         String hops[] = hopList.split(",");
         for (String s : hops) {
@@ -160,8 +167,10 @@ public class TorCircuit {
      * @param r Hop
      */
     public void create(OnionRouter r) throws IOException {
-        if (state == STATES.DESTROYED)
+        if (state == STATES.DESTROYED) {
+            log.error("Trying to use destroyed circuit");
             throw new RuntimeException("Trying to use destroyed circuit");
+        }
 
         setState(STATES.CREATING);
         sock.sendCell(circId, Cell.CREATE, createPayload(r));
@@ -278,8 +287,10 @@ public class TorCircuit {
      * @throws IOException
      */
     public void extend(OnionRouter nextHop) throws IOException {
-        if (state == STATES.DESTROYED)
+        if (state == STATES.DESTROYED) {
+            log.error("Trying to use destroyed circuit");
             throw new RuntimeException("Trying to use destroyed circuit");
+        }
 
         // Unused, throws ArrayIndexOutOfBoundsException when extend() is called after createCircuit()
         // without the fix to getLastHop() which returns null when hops.size() == 0
@@ -329,8 +340,10 @@ public class TorCircuit {
     }
 
     public TorStream createDirStream(TorStream.TorStreamListener list) throws IOException {
-        if (state == STATES.DESTROYED)
+        if (state == STATES.DESTROYED) {
+            log.error("Trying to use destroyed circuit");
             throw new RuntimeException("Trying to use destroyed circuit");
+        }
 
         //TODO: allocate stream and circuit IDS properly
         int stid = streamId_counter++;
@@ -349,8 +362,10 @@ public class TorCircuit {
      * @return TorStream object
      */
     public TorStream createStream(String host, int port, TorStream.TorStreamListener list) throws IOException {
-        if (state == STATES.DESTROYED)
+        if (state == STATES.DESTROYED) {
+            log.error("Trying to use destroyed circuit");
             throw new RuntimeException("Trying to use destroyed circuit");
+        }
 
         byte b[] = new byte[100];
         ByteBuffer buf = ByteBuffer.wrap(b);
@@ -378,8 +393,10 @@ public class TorCircuit {
 
     // must be synchronised due to hash calculation - out of sync = bad
     public synchronized void send(byte[] payload, int relaytype, boolean early, short stream) throws IOException {
-        if (state == STATES.DESTROYED)
+        if (state == STATES.DESTROYED) {
+            log.error("Trying to use destroyed circuit");
             throw new RuntimeException("Trying to use destroyed circuit");
+        }
 
         if (relaytype == RELAY_DATA)
             sendWindow--;
@@ -452,8 +469,10 @@ public class TorCircuit {
             receiveWindow += 100;
         }
 
-        if (state == STATES.DESTROYED)
+        if (state == STATES.DESTROYED) {
+            log.error("Trying to use destroyed circuit");
             throw new RuntimeException("Trying to use destroyed circuit");
+        }
 
         if (c.cmdId == Cell.CREATED) // create
         {
@@ -468,7 +487,7 @@ public class TorCircuit {
 
             handled = true;
         } else if (c.cmdId == Cell.RELAY_EARLY || c.cmdId == Cell.PADDING || c.cmdId == Cell.VPADDING) { // these are used in deanon attacks
-            System.out.println("WARNING**** cell CMD "+c.cmdId+" received in - Possible DEANON attack!!: Route: "+hops.toArray());
+            log.error("WARNING**** cell CMD "+c.cmdId+" received in - Possible DEANON attack!!: Route: "+hops.toArray());
         } else if (c.cmdId == Cell.RELAY) // relay cell
         {
             // cell decrypt logic - decrypt from each hop in turn checking recognised and digest until success
@@ -501,7 +520,7 @@ public class TorCircuit {
             }
 
             if (cellFromHop == -1) {
-                System.out.println("unrecognised cell - didn't decrypt");
+                log.warn("unrecognised cell - didn't decrypt");
                 return false;
             }
             // successfully decrypted - now let's proceed
@@ -510,7 +529,7 @@ public class TorCircuit {
             ByteBuffer buf = ByteBuffer.wrap(c.payload);
             int cmd = buf.get();
             if (buf.getShort() != 0) {
-                System.out.println("WARN: invalid relay cell");
+                log.warn("invalid relay cell");
                 return false;
             }
             int streamid = buf.getShort();
@@ -523,8 +542,8 @@ public class TorCircuit {
             handled = handleRelayCell(cmd, streamid, cellFromHop, data);
 
         } else if (c.cmdId == Cell.DESTROY) {
-            System.out.println("Circuit destroyed " + circId);
-            System.out.println("Reason: " + DESTROY_ERRORS[c.payload[0]]);
+            log.info("Circuit destroyed " + circId);
+            log.info("Reason: " + DESTROY_ERRORS[c.payload[0]]);
             for (TorStream s : streams.values()) {
                 s.notifyDisconnect();
             }
@@ -549,17 +568,19 @@ public class TorCircuit {
     public boolean handleRelayCell(int cmdId, int streamId, int fromHop, byte[] payload) throws IOException {
         TorStream stream = streams.get(new Integer(streamId));
 
+        log.trace("Got RELAY cell with streamId{} cmdID {}", streamId, cmdId);
+
         if (streamId > 0 && stream == null) {
-            System.out.println("invalid stream id " + streamId);
+            log.info("invalid stream id " + streamId);
             return false;
         }
 
         if (fromHop != hops.size() - 1)
-            System.out.println("CELL FROM INTERMEDIATE HOP " + fromHop);
+            log.info("Cell from intermediate hop " + fromHop);
 
         switch (cmdId) {
             case RELAY_DROP:
-                System.out.println("WARNING**** _relay_ cell CMD DROP received - Possible DEANON attack!!: Route: "+hops.toArray());
+                log.warn("WARNING**** _relay_ cell CMD DROP received - Possible DEANON attack!!: Route: "+hops.toArray());
                 break;
 
             case RELAY_COMMAND_INTRODUCE_ACK:
@@ -577,9 +598,9 @@ public class TorCircuit {
                 break;
 
             case RELAY_TRUNCATED:
-                System.out.println("TRUNCATED CELL RECEIVED - Cannot handle yet! " + DESTROY_ERRORS[payload[0]]);
+                log.error("TRUNCATED CELL RECEIVED - Cannot handle yet! " + DESTROY_ERRORS[payload[0]]);
                 for (int hi = hops.size() - 1; hi > fromHop; hi--) {
-                    System.out.println("removing hop " + hi + " from circ");
+                    log.info("removing hop " + hi + " from circ");
                     hops.remove(hi);
                 }
 
@@ -594,8 +615,10 @@ public class TorCircuit {
                     setBlocking(false);
                     extend(circuitToBuild.removeFirst());
                     setBlocking(block);
-                } else
+                } else {
+                    log.info("Circuit build complete");
                     setState(STATES.READY);
+                }
                 break;
             case RELAY_CONNECTED:
                 if (stream != null)
@@ -604,7 +627,7 @@ public class TorCircuit {
             case RELAY_SENDME:
                 if (streamId == 0)
                     sendWindow += 100;
-                System.out.println("RELAY_SENDME circ " + circId + " Stream " + streamId + " cur window " + sendWindow);
+                log.trace("RELAY_SENDME circ " + circId + " Stream " + streamId + " cur window " + sendWindow);
                 break;
             case RELAY_DATA:
                 if (state == STATES.READY)
@@ -614,14 +637,14 @@ public class TorCircuit {
                 break;
             case RELAY_END:
                 if (payload[0] != 6)
-                    System.out.println("Remote stream closed with error code " + STREAM_ERRORS[payload[0]]);
+                    log.info("Remote stream closed with error code " + STREAM_ERRORS[payload[0]]);
                 if (stream != null) {
                     stream.notifyDisconnect();
                     streams.remove(new Integer(streamId));
                 }
                 break;
             default:
-                System.out.println("unknown relay cell cmd " + cmdId);
+                log.warn("unknown relay cell cmd " + cmdId);
                 return false;
         }
         return true;

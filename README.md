@@ -13,7 +13,7 @@ Introduction
 
 The framework is a Java Tor client that is designed to be easy to read and modify at the code level.  There are a number of examples in the examples directory on how to use the framework.  Modifying the core framework code should be relatively straight forward for someone loosely familiar with the Tor protocol.
 
-The easiest way to get started is to import the project into IntelliJ and hopefully maven should fetch all the dependencies for you. IntelliJ will require the tor module's Language Level to be set to at least 7.0 to compile the multi-catch statements used by the project (File-Project Structure-Language Level).
+The easiest way to get started is to import the project into IntelliJ and hopefully maven should fetch all the dependencies for you. IntelliJ will require the tor module's Language Level to be set to at least 7.0 to compile the multi-catch statements used by the project (File-Project Structure-Language Level).  Additionally, you need to add the project root to the class path so that the logging library picks up the configuration file, this can be done under File->Project Structure->Modules->Dependancies and click the + on the far right.
 
 Before you do anything, you'll need a copy of the Consensus from a directory authority (which contains a list of nodes in the Tor network).  Code:
 
@@ -60,6 +60,15 @@ Hidden Service Usage
 ====================
 
 See the example provided.  Lots of useful functions in HiddenService class.
+
+Output
+======
+
+We use the Apache log4j2 library for logging output which allows you to configure the amount of output the library produces and where this output goes (e.g. to Console/file/socket/etc).  The logging level is set the in *log4j2.xml* file (*WHICH MUST BE IN CLASSPATH!*), and valid log levels are: OFF, FATAL, ERROR, WARN, INFO, DEBUG, TRACE. 
+
+By default, the log level is set to DEBUG, output is sent to ERR and each message will show the class and method that produced that output.  Trace shows the highest level, including received and sent packets.
+
+You can do filtering of log messages - for more info please see the [log4j2 homepage](https://logging.apache.org/log4j/2.x/manual).
 
 Advanced Usage
 ==============

@@ -23,6 +23,8 @@ import org.apache.commons.codec.binary.Base32;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.ArrayUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.bouncycastle.util.encoders.Base64;
 import tor.util.TorDocumentParser;
 
@@ -39,6 +41,7 @@ import java.util.TreeMap;
  * Created by gho on 25/07/14.
  */
 public class HiddenService {
+    final static Logger log = LogManager.getLogger();
     // onion as base32 encoded, replica=[0,1],
     public static byte[] getDescId(String onion, byte replica) {
         byte[] onionbin = new Base32().decode(onion.toUpperCase());
@@ -92,7 +95,7 @@ public class HiddenService {
         // loop through responsible directories until successful
         for (int i = 0; i < ors.length; i++) {
             OnionRouter or = ors[i];
-            System.out.println(or);
+            log.debug("Trying Directory Server: {}", or);
 
             // establish circuit to responsible director
             TorCircuit circ = sock.createCircuit(true);
@@ -153,12 +156,12 @@ public class HiddenService {
             return data.substring(dataIndex);
         }
 
-        System.out.println("NOT FOUND HS DESCRIPTOR!!!!!!!!!!!!!1*****************");
+        log.warn("Not found hs descriptor!");
         return null;
     }
 
     public static void sendIntroduce(TorSocket sock, String onion, TorCircuit rendz) throws IOException {
-        System.out.println("Fetching Hidden Service Descriptor");
+        log.debug("Fetching Hidden Service Descriptor");
         String hsdescTxt = fetchHSDescriptor(sock, onion);
         OnionRouter rendzOR = rendz.getLastHop().router;
 
@@ -179,9 +182,8 @@ public class HiddenService {
         byte[] serviceKey = Base64.decode(intros.getArrayItem("service-key")[introPointNum]);
         byte skHash[] = TorCrypto.getSHA1().digest(serviceKey);
         assert (skHash.length == 20);
-        System.out.println(ip0or);
+        log.debug("Using Intro Point: {}, building circuit...", ip0or);
 
-        System.out.println("Creating introduction circuit");
         TorCircuit ipcirc = sock.createCircuit(true);
         ipcirc.create();
         ipcirc.extend(ip0or);
@@ -229,12 +231,13 @@ public class HiddenService {
         buf.get(introcell);
 
         ipcirc.send(introcell, TorCircuit.RELAY_COMMAND_INTRODUCE1, false, (short) 0);
-        System.out.println("Waiting for introduce acknowledgement");
+        log.debug("waiting for introduce acknowledgement");
         ipcirc.waitForState(TorCircuit.STATES.INTRODUCED, false);
 
-        System.out.println("Now waiting for rendezvous connect");
+        log.debug("Now waiting for rendezvous connect");
         rendz.waitForState(TorCircuit.STATES.RENDEZVOUS_COMPLETE, false);
 
         ipcirc.destroy(); // no longer needed
+        log.debug("Hidden Service circuit built");
     }
 }

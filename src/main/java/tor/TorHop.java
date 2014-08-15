@@ -19,6 +19,8 @@ package tor;
         along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import tor.util.TorCircuitException;
 
 import javax.crypto.Cipher;
@@ -30,6 +32,7 @@ import java.security.MessageDigest;
 import java.util.Arrays;
 
 public class TorHop {
+    final static Logger log = LogManager.getLogger();
 
     byte[] kh = new byte[TorCrypto.HASH_LEN], df = new byte[TorCrypto.HASH_LEN], db = new byte[TorCrypto.HASH_LEN];
     byte[] kf = new byte[TorCrypto.KEY_LEN], kb = new byte[TorCrypto.KEY_LEN];
@@ -74,9 +77,9 @@ public class TorHop {
 
 
         if (!Arrays.equals(_kh, kh))
-            throw new TorCircuitException("hop key setup failed to router: "+router);
+            log.error("hop key setup failed to router: " + router);
 
-        System.out.println("Hop added " + router);
+        log.debug("Hop added " + router);
     }
 
     @Override
