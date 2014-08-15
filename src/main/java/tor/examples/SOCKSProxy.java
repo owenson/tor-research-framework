@@ -55,7 +55,7 @@ public class SOCKSProxy {
 
         public void newClientData(Selector selector, SelectionKey sk) throws IOException {
             if (!connected) {
-                ByteBuffer inbuf = ByteBuffer.allocate(512);
+                ByteBuffer inbuf = ByteBuffer.allocate(16384);
                 if (client.read(inbuf) < 1)
                     return;
                 inbuf.flip();

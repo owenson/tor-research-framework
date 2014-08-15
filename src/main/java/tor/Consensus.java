@@ -21,12 +21,13 @@ package tor;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import tor.util.TorDocumentParser;
 
 import java.io.*;
-import java.net.InetAddress;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.net.UnknownHostException;
+import java.net.*;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
@@ -36,6 +37,7 @@ import java.util.zip.InflaterInputStream;
 
 public class Consensus {
 
+    final static Logger log = LogManager.getLogger();
     // The maximum number of connection tries to directory caches before falling back to authorities
     // TODO: we could do this much better with a setter method - on the class or object?
     public static int MAX_TRIES = 10;
@@ -113,11 +115,11 @@ public class Consensus {
                 // Typically, 80% of routers are running, and almost all are valid
                 OnionRouter dir = getRandomORWithFlag("V2Dir,Running,Valid,Fast");
 
-                System.out.println("Connecting to " + directoryType + " " + dir.name);
+                log.trace("Connecting to " + directoryType + " " + dir.name);
                 try {
-                    return connectToDirectoryStream(dir.ip, dir.dirport, path);
+                    return connectToDirectory(dir.ip, dir.dirport, path);
                 } catch (IOException e) {
-                    System.out.println("Failed to get " + path + " from " + directoryType + " "
+                    log.warn("Failed to get " + path + " from " + directoryType + " "
                             + dir.ip + ":" + String.valueOf(dir.dirport));
                     continue;
                 }
@@ -138,11 +140,11 @@ public class Consensus {
             String auth = authorities[i];
             String sp[] = auth.split(" ");
             String ipp[] = sp[3].split(":");
-            System.out.println("Connecting to " + directoryType + " " + sp[0]);
+            log.trace("Connecting to " + directoryType + " " + sp[0]);
             try {
-                return connectToDirectoryStream(ipp[0], ipp[1], path);
+                return connectToDirectory(ipp[0], ipp[1], path);
             } catch (IOException e) {
-                System.out.println("Failed to get " + path + " from " + directoryType + " " + sp[0]);
+                log.warn("Failed to get " + path + " from " + directoryType + " " + sp[0]);
                 continue;
             }
         }
@@ -150,30 +152,66 @@ public class Consensus {
         throw new RuntimeException("Can't get " + path + " after " + String.valueOf(MAX_TRIES) + " tries.");
     }
 
-    private InputStream connectToDirectoryStream(InetAddress address, int port, String path) throws IOException {
-        return connectToDirectoryStream(address.getHostAddress(), String.valueOf(port), path);
+    private InputStream connectToDirectory(InetAddress address, int port, String path) throws IOException {
+        return connectToDirectory(address.getHostAddress(), String.valueOf(port), path);
     }
 
-    private InputStream connectToDirectoryStream(String address, String port, String path) throws IOException {
+    private InputStream connectToDirectory(String address, String port, String path) throws IOException {
         URL url = new URL("http://" + address + ":" + port + path);
 
         // try the compressed version first, and transparently inflate it
         if (!path.endsWith(".z")) {
             try {
                 URL zurl = new URL("http://" + address + ":" + port + path + ".z");
-                System.out.println("Downloading: " + zurl.toString());
+                log.debug("Downloading (from directory server): " + zurl.toString());
                 return new InflaterInputStream(zurl.openStream());
+            } catch(SocketException e) {
+                log.warn("Failed to connect: " + e);
+                throw e;
             } catch (IOException e) {
-                System.out.println("Transparent download of compressed stream failed, falling back to uncompressed."
+                log.warn("Transparent download of compressed stream failed, falling back to uncompressed."
                         + " Exception: " + e.toString());
             }
         }
 
-        System.out.println("Downloading: " + url.toString());
+        log.debug("Downloading: " + url.toString());
         InputStream in = url.openStream();
         if(path.endsWith(".z"))
             return new InflaterInputStream(in);
         return in;
+    }
+
+    /**
+     * Fetch all router descriptors and add the keys to the OnionRouter objects
+     * This saves directory fetches if you're doing a lot of route building
+     * (normally this is done on a per router basis as required which is slow for lots of fetches)
+     *
+     * @throws IOException
+     */
+    public void fetchAllDescriptors() throws IOException {
+        BufferedReader in = new BufferedReader(new InputStreamReader(getDirectoryStream("/tor/server/all.z")));
+        String ln, descriptor="";
+
+        while(true){
+            ln = in.readLine();
+            if(ln == null || ln.startsWith("router ")) { // read a whole router descriptor
+                if(!descriptor.isEmpty()) { // parse it and extract keys
+                    TorDocumentParser tdp = new TorDocumentParser(descriptor);
+
+                    String fprint = StringUtils.replace(tdp.getItem("fingerprint"), "\\s+", "");
+                    if(fprint!=null && consensus.routers.containsKey(fprint)) {
+                        OnionRouter or = consensus.routers.get(fprint);
+                        or.pubKeyraw = Base64.decodeBase64(tdp.getItem("onion-key"));
+                        or.pubKey = TorCrypto.asn1GetPublicKey(or.pubKeyraw);
+                    }
+                }
+                descriptor = "";
+                if(ln == null)
+                    break;
+            }
+            descriptor+=ln + "\n";
+        }
+
     }
 
     private boolean fetchConsensus(boolean forceDownload) {
@@ -194,7 +232,7 @@ public class Consensus {
                         int idx = ln.indexOf(" ");
                         Date valid = df.parse(ln.substring(idx + 1) + " GMT");
                         if (valid.after(new Date())) { // saved consensus still valid
-                            System.out.println("cached-consensus exists in current directory - still valid so using. Expires: " + valid);
+                            log.info("cached-consensus exists in current directory - still valid so using. Expires: " + valid);
                             consensusReader = rdr;
                         }
                         consensusValidUntil = valid;
@@ -204,7 +242,7 @@ public class Consensus {
             }
 
             if (consensusReader == null) { // if not using cached-consensus
-                System.out.println("No valid cached consensus - fetching.");
+                log.info("No valid cached consensus - fetching.");
                 InputStream conStream = getDirectoryStream("/tor/status-vote/current/consensus.z");
                 consensusReader = new BufferedReader(new InputStreamReader(conStream));
                 if (new File(".").canWrite()) // can write to current directory?
@@ -423,7 +461,7 @@ public class Consensus {
      * @return the descriptor(s) downloaded from the specified directory (cache)
      */
     public String getRouterDescriptor(String hash, String address, String port) throws IOException {
-        return IOUtils.toString(connectToDirectoryStream(address, port, "/tor/server/fp/" + hash));
+        return IOUtils.toString(connectToDirectory(address, port, "/tor/server/fp/" + hash));
     }
 
     /**
@@ -435,6 +473,6 @@ public class Consensus {
      * @return the descriptor(s) downloaded from the specified directory (cache)
      */
     public String getRouterDescriptor(String hash, InetAddress address, int port) throws IOException {
-        return IOUtils.toString(connectToDirectoryStream(address, port, "/tor/server/fp/" + hash));
+        return IOUtils.toString(connectToDirectory(address, port, "/tor/server/fp/" + hash));
     }
 }

@@ -24,10 +24,11 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 public class Cell {
-    public int circId;
+    public long circId;
     public int cmdId;
     public byte payload[];
 
+    public static final int PADDING = 0;
     public static final int CREATE = 1;
     public static final int CREATED = 2;
     public static final int RELAY = 3;
@@ -35,12 +36,13 @@ public class Cell {
     public static final int NETINFO = 8;
     public static final int RELAY_EARLY = 9;
     public static final int VERSIONS = 7;
+    public static final int VPADDING = 128;
     public static final int CERTS = 129;
     public static final int AUTH_CHALLENGE = 130;
     public static final int AUTHENTICATE = 131;
     public static final int AUTHORIZE = 132;
 
-    public Cell(int circ, int cmd, byte[] pl) {
+    public Cell(long circ, int cmd, byte[] pl) {
         circId = circ;
         cmdId = cmd;
         payload = pl;
@@ -66,7 +68,7 @@ public class Cell {
         if(protocolVersion<4)
             buf.putShort((short) circId);
         else
-            buf.putInt(circId);
+            buf.putInt((int)circId);
         buf.put((byte) cmdId);
 
         if (cmdId == 7 || cmdId >= 128)
@@ -78,18 +80,18 @@ public class Cell {
         return cell;
     }
 
-    public static Cell fromBytes(byte[] in) {
-        ByteBuffer buf = ByteBuffer.wrap(in);
-        int circid = buf.getShort();
-        int cmdId = buf.get() & 0xff;
-        int pllength = 509;
-
-        if (cmdId == 7 || cmdId >= 128)
-            pllength = buf.getShort();
-
-        byte payload[] = new byte[pllength];
-        buf.get(payload);
-
-        return new Cell(circid, cmdId, payload);
-    }
+//    public static Cell fromBytes(byte[] in) {
+//        ByteBuffer buf = ByteBuffer.wrap(in);
+//        int circid = buf.getShort();
+//        int cmdId = buf.get() & 0xff;
+//        int pllength = 509;
+//
+//        if (cmdId == 7 || cmdId >= 128)
+//            pllength = buf.getShort();
+//
+//        byte payload[] = new byte[pllength];
+//        buf.get(payload);
+//
+//        return new Cell(circid, cmdId, payload);
+//    }
 }

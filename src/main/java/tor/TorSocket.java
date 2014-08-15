@@ -18,26 +18,28 @@
 */
 package tor;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import sun.misc.IOUtils;
+import tor.util.TrustAllManager;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.Security;
-import java.security.cert.CertificateException;
-import java.security.cert.X509Certificate;
 import java.util.TreeMap;
 
 public class TorSocket {
+    final static Logger log = LogManager.getLogger();
 
     private static Consensus consensus;
 
@@ -45,12 +47,14 @@ public class TorSocket {
     OutputStream out;
     InputStream in;
     public int PROTOCOL_VERSION = 3; // auto negotiated later - this is minimum value supported.
-    private int PROTOCOL_VERSION_MAX = 4; // max protocol version supported
+    protected int PROTOCOL_VERSION_MAX = 4; // max protocol version supported
 
     OnionRouter firstHop; // e.g. hop connected to
 
+    public Class defaultTorCircuitClass = TorCircuit.class;
+
     // circuits for this socket
-    TreeMap<Integer, TorCircuit> circuits = new TreeMap<>();
+    TreeMap<Long, TorCircuit> circuits = new TreeMap<>();
 
     //LinkedBlockingQueue<Cell> sendQueue = new LinkedBlockingQueue<Cell>();
     enum STATES {
@@ -69,13 +73,15 @@ public class TorSocket {
      * @param cmd     Cell Command.  See Cell.*
      * @param payload Cell Payload
      */
-    public void sendCell(int circid, int cmd, byte[] payload)
+    public void sendCell(long circid, int cmd, byte[] payload)
             throws IOException {
-        out.write(new Cell(circid, cmd, payload).getBytes(PROTOCOL_VERSION));
+        sendCell(new Cell(circid, cmd, payload));
     }
 
     public void sendCell(Cell c)
             throws IOException {
+
+        log.trace("Sending {}", c);
 
         out.write(c.getBytes(PROTOCOL_VERSION));
     }
@@ -90,11 +96,11 @@ public class TorSocket {
         ByteBuffer buf = ByteBuffer.wrap(hdr);
         buf.order(ByteOrder.BIG_ENDIAN);
 
-        int circid = 0;
+        long circid = 0;
         if(PROTOCOL_VERSION < 4)
-            circid = buf.getShort();
+            circid = buf.getShort() & 0xFFFF;
         else
-            circid = buf.getInt();
+            circid = buf.getInt() & 0xFFFFFFFF;
 
         int cmdId = buf.get() & 0xff;
         int pllength = 509;
@@ -104,6 +110,8 @@ public class TorSocket {
         }
 
         byte payload[] = blockingRead(pllength);
+
+        log.trace("Cell received: circId {} cmdId {}", circid, cmdId);
 
         return new Cell(circid, cmdId, payload);
 
@@ -127,6 +135,8 @@ public class TorSocket {
     }
 
     public void setState(STATES newState) {
+        log.trace("New State {} (oldState {})", newState, this.state);
+
         synchronized (stateNotify) {
             this.state = newState;
             this.stateNotify.notify();
@@ -145,13 +155,14 @@ public class TorSocket {
 
                 switch (c.cmdId) {
                     case Cell.NETINFO:
+                        log.trace("Got NETINFO Sending NETINFO");
                         sendNetInfo();
                         setState(STATES.READY);
                         continue;
                 }
-                TorCircuit circ = circuits.get(new Integer(c.circId));
+                TorCircuit circ = circuits.get(new Long(c.circId));
                 if (circ == null || !circ.handleCell(c))
-                    System.out.println("unhandled cell " + c);
+                    log.info("Received unhandled cell {}",c);
 
             } catch (IOException e) {
                 e.printStackTrace();
@@ -166,10 +177,28 @@ public class TorSocket {
      * @return TorCircuit object
      */
     public TorCircuit createCircuit(boolean blocking) {
-        TorCircuit circ = new TorCircuit(this);
+        return createCircuit(defaultTorCircuitClass, blocking);
+    }
+
+    /**
+     * Creates a circuit using a custom TorCircuit class
+     *
+     * @return TorCircuit object
+     */
+    public <T extends TorCircuit> T createCircuit(Class<T> torCircClass, boolean blocking) {
+        T circ;
+        try {
+            circ = torCircClass.getDeclaredConstructor(TorSocket.class).newInstance(this);
+        } catch (InstantiationException  | IllegalAccessException | NoSuchMethodException | InvocationTargetException e) {
+            throw new RuntimeException(e);
+        }
         circ.setBlocking(blocking);
-        circuits.put(circ.circId, circ);
+        circuits.put((long)circ.circId, circ);
         return circ;
+    }
+
+    public TorSocket() {
+
     }
 
     /**
@@ -183,39 +212,14 @@ public class TorSocket {
 
         firstHop = fh;
         if (firstHop == null)
-            throw new RuntimeException("Couldn't find router ip in consensus");
+            log.exit("Invalid first-hop");
 
         Security.addProvider(new BouncyCastleProvider());
-        // fake trust manager to accept all certs
-        TrustManager[] trustAllCerts = new TrustManager[]{new X509TrustManager() {
-
-            @Override
-            public void checkClientTrusted(X509Certificate[] chain,
-                                           String authType) throws CertificateException {
-                // TODO Auto-generated method stub
-
-            }
-
-            @Override
-            public void checkServerTrusted(X509Certificate[] chain,
-                                           String authType) throws CertificateException {
-                // TODO Auto-generated method stub
-
-            }
-
-            @Override
-            public X509Certificate[] getAcceptedIssuers() {
-                // TODO Auto-generated method stub
-                return null;
-            }
-
-        }};
-
         SSLContext sc;
 
         try {
             sc = SSLContext.getInstance("SSL");
-            sc.init(null, trustAllCerts, new java.security.SecureRandom());
+            sc.init(null, new TrustManager[] { new TrustAllManager() }, new java.security.SecureRandom());
         } catch (KeyManagementException | NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
         }
@@ -228,6 +232,7 @@ public class TorSocket {
 
 
         // versions cell
+        log.trace("Sending VERSIONS");
         sendCell(0, Cell.VERSIONS, new byte[]{00, 03, 00, 04});
         Cell versionReply = recvCell();
         ByteBuffer verBuf = ByteBuffer.wrap(versionReply.payload);
@@ -236,7 +241,7 @@ public class TorSocket {
             if(offeredVer <= PROTOCOL_VERSION_MAX && offeredVer > PROTOCOL_VERSION)
                 PROTOCOL_VERSION = offeredVer;
         }
-        System.out.println("Negotiated protocol vesrsion: "+PROTOCOL_VERSION);
+        log.info("Negotiated protocol vesrsion: "+PROTOCOL_VERSION);
 
         new Thread(new Runnable() {
             @Override
@@ -254,5 +259,7 @@ public class TorSocket {
                 }
             }
         }
+
+        log.info("Tor connection established - socket ready");
     }
 }
