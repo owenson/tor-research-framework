@@ -54,6 +54,7 @@ TOR_BASE_URL = HTTP_SCHEME SCHEME_SEP NET_PATH HOST_NAME [ COLON PORT ] SLASH �
 
 
 Download from Directory Caches: (Download URLs)
+# As of 2.6, tor's maximum HTTP header size is 50,000 
 
 # From Section 3.3 of http://www.w3.org/Protocols/HTTP/1.0/spec.html
 HTTP_DATE = <One of the following:>
@@ -200,6 +201,9 @@ STATUS_BASE_URL “consensus-signatures” [ Z ]
 
 
 Submission to Authorities: (Upload URLs)
+# As of 2.6, tor's maximum HTTP body (upload) size is 16MiB - 1 byte
+# Starting several uploads at once could choke RAM on constrained systems
+# (Which, of course, any authorities should not be)
 
 CONTENT_LENGTH = “Content-Length” COLON WS ( “0” - “9” ) +
 CONTENT_ENCODING = “Content-Encoding” COLON WS ( “deflate" | "identity" | ? )

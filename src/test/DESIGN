@@ -1,5 +1,11 @@
 Design for Tor Fuzzer
 
+TL;DR:
+#!/bin/bash
+(echo -n "GET /tor/"; cat /dev/random | head -c 49950; (echo " HTTP/1.0"; echo;) | unix2dos) | nc localhost 80
+# Except configurable, flexible, repeatable, and able to tell when tor has died
+# Oh, and not just focused on directory URLs
+
 Tim Wilson-Brown, July 2014
 Based on tor-research-framework by Dr Gareth Owen
 Based on the Tor directory specification
