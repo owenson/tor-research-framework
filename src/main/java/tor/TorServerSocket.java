@@ -23,6 +23,8 @@ import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.RSAPublicKey;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Created by gho on 03/08/14.
@@ -53,7 +55,7 @@ public class TorServerSocket extends TorSocket {
 
         System.setProperty("javax.net.ssl.keyStore", "keys/keystore.jks");
         System.setProperty("javax.net.ssl.keyStorePassword", "123456");
-//149A17B774002FEB90048779432B0828B29EA213 but got ============ CF35FF36FAB07773D147F481EB72AD2C3209AB57
+
         loadKeys();
 
         // connect
@@ -92,14 +94,19 @@ public class TorServerSocket extends TorSocket {
             FileInputStream idCertIS = new FileInputStream(new File("keys/identity.crt"));
             FileInputStream linkCertIS = new FileInputStream(new File("keys/link.crt"));
             FileInputStream authCertIS = new FileInputStream(new File("keys/auth.crt"));
+
             CertificateFactory cf = null;
             cf = CertificateFactory.getInstance("X.509");
+
             identityCert = (X509Certificate) cf.generateCertificate(idCertIS);
             log.info("Our Identity Cert Digest: " + Hex.toHexString(TorCrypto.getSHA1().digest(TorCrypto.publicKeyToASN1((RSAPublicKey) identityCert.getPublicKey()))));
+
             linkCert = (X509Certificate) cf.generateCertificate(linkCertIS);
             log.info("Our Link Cert Digest: " + Hex.toHexString(TorCrypto.getSHA1().digest(TorCrypto.publicKeyToASN1((RSAPublicKey) linkCert.getPublicKey()))));
+
             authCert = (X509Certificate) cf.generateCertificate(authCertIS);
             log.info("Our Auth Cert Digest: " + Hex.toHexString(TorCrypto.getSHA1().digest(TorCrypto.publicKeyToASN1((RSAPublicKey) authCert.getPublicKey()))));
+
             identityPubKey = (RSAPublicKey) identityCert.getPublicKey();
 
             FileReader in = new FileReader("keys/identity.key");
@@ -111,35 +118,24 @@ public class TorServerSocket extends TorSocket {
     }
 
     public void sendCertsCell() throws IOException {
-        ByteBuffer buf = ByteBuffer.allocate(4096);
-        buf.put((byte) 3);
-
-        byte[] link;
-        byte[] ident, auth;
+        HashMap<Integer, byte[]> certs = new HashMap<>();
         try {
-            link = linkCert.getEncoded();
-            ident = identityCert.getEncoded();
-            auth = authCert.getEncoded();
+            certs.put(1, linkCert.getEncoded());
+            certs.put(2, identityCert.getEncoded());
+            certs.put(3, authCert.getEncoded());
         } catch (CertificateEncodingException e) {
             log.fatal(e);
             System.exit(1);
             return;
         }
 
-        // LINK CERTIFICATE
-        buf.put((byte)1);
-        buf.putShort((short) link.length);
-        buf.put(link);
-
-        // IDENTITY CERTIFICATE
-        buf.put((byte) 2);
-        buf.putShort((short) ident.length);
-        buf.put(ident);
-
-        // AUTH CERTIFICATE
-        buf.put((byte) 3);
-        buf.putShort((short) auth.length);
-        buf.put(auth);
+        ByteBuffer buf = ByteBuffer.allocate(4096);
+        buf.put((byte) certs.size());
+        for (Map.Entry<Integer, byte[]> cert : certs.entrySet()) {
+            buf.put((byte) cert.getKey().intValue());
+            buf.putShort((short) cert.getValue().length);
+            buf.put(cert.getValue());
+        }
 
         buf.flip();
         byte certsCell[] = new byte[buf.limit()];
@@ -167,6 +163,10 @@ public class TorServerSocket extends TorSocket {
 
                     case Cell.CREATED:
                         log.error("Got created cell - not impl!");
+                        continue;
+
+                    case Cell.DESTROY:
+                        log.info("Destroy cell reason {}", TorCircuit.DESTROY_ERRORS[c.payload[0]]);
                         continue;
 
                     default:
