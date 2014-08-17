@@ -1,17 +1,26 @@
 package tor;
 
+import org.bouncycastle.asn1.pkcs.RSAPrivateKey;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
-import tor.util.TrustAllManager;
+import org.bouncycastle.util.encoders.Hex;
+import org.bouncycastle.util.io.pem.PemReader;
 
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManager;
+import javax.net.ssl.SSLServerSocketFactory;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileReader;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.ByteBuffer;
-import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.Security;
+import java.security.cert.CertificateEncodingException;
+import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
+import java.security.interfaces.RSAPublicKey;
 
 /**
  * Created by gho on 03/08/14.
@@ -23,20 +32,29 @@ public class TorServerSocket extends TorSocket {
      * @param localPort
      * @throws IOException
      */
-    public TorServerSocket(int localPort) throws IOException {
+    public TorServerSocket(int localPort) throws IOException, NoSuchAlgorithmException {
 
         Security.addProvider(new BouncyCastleProvider());
         SSLContext sc;
 
-        try {
-            sc = SSLContext.getInstance("SSL");
-            sc.init(null, new TrustManager[] { new TrustAllManager() }, new java.security.SecureRandom());
-        } catch (KeyManagementException | NoSuchAlgorithmException e) {
-            throw new RuntimeException(e);
+        if(!new File("keys/keystore.jks").exists()) {
+            log.fatal("keys/keystore.jks not found.  Make sure you run certgen.sh in keys/");
+            System.exit(1);
         }
 
+        System.setProperty("javax.net.ssl.keyStore", "keys/keystore.jks");
+        System.setProperty("javax.net.ssl.keyStorePassword", "123456");
+
+        loadKeys();
+        byte[] myPubKeyRaw = TorCrypto.publicKeyToASN1(identityPubKey);
+        byte identity[] = TorCrypto.getSHA1().digest(myPubKeyRaw);
+        System.out.println("Server Identity: "+Hex.toHexString(identity));
+        System.out.println("Server PubKey (ASN.1): "+Hex.toHexString(myPubKeyRaw));
+        System.out.println(TorCrypto.asn1GetPublicKey(myPubKeyRaw));
+        System.out.println(identityPrivKey.getModulus());
+
         // connect
-        ServerSocket listenSocket = sc.getServerSocketFactory().createServerSocket(localPort);
+        ServerSocket listenSocket = SSLServerSocketFactory.getDefault().createServerSocket(localPort);
 
         while(true) {
             Socket client = listenSocket.accept();
@@ -47,6 +65,67 @@ public class TorServerSocket extends TorSocket {
         }
     }
 
+    static X509Certificate identityCert;
+    static RSAPublicKey identityPubKey;
+    static RSAPrivateKey identityPrivKey;
+    static X509Certificate linkCert;
+    static X509Certificate authCert;
+    public void loadKeys() {
+        try {
+            FileInputStream idCertIS = new FileInputStream(new File("keys/identity.crt"));
+            FileInputStream linkCertIS = new FileInputStream(new File("keys/link.crt"));
+            FileInputStream authCertIS = new FileInputStream(new File("keys/auth.crt"));
+            CertificateFactory cf = null;
+            cf = CertificateFactory.getInstance("X.509");
+            identityCert = (X509Certificate) cf.generateCertificate(idCertIS);
+            linkCert = (X509Certificate) cf.generateCertificate(linkCertIS);
+            authCert = (X509Certificate) cf.generateCertificate(authCertIS);
+            identityPubKey = (RSAPublicKey) identityCert.getPublicKey();
+
+            FileReader in = new FileReader("keys/identity.key");
+            identityPrivKey = RSAPrivateKey.getInstance(new PemReader(in).readPemObject().getContent());
+        } catch (CertificateException | IOException e) {
+            log.error("Unable to load server public key");
+            System.exit(1);
+        }
+    }
+
+    public void sendCertsCell() throws IOException {
+        ByteBuffer buf = ByteBuffer.allocate(4096);
+        buf.put((byte)3);
+
+        byte[] link;
+        byte[] ident, auth;
+        try {
+            link = linkCert.getEncoded();
+            ident = identityCert.getEncoded();
+            auth = authCert.getEncoded();
+        } catch (CertificateEncodingException e) {
+            log.fatal(e);
+            System.exit(1);
+            return;
+        }
+
+        // LINK CERTIFICATE
+        buf.put((byte)1);
+        buf.putShort((short) link.length);
+        buf.put(link);
+
+        // IDENTITY CERTIFICATE
+        buf.put((byte) 2);
+        buf.putShort((short) ident.length);
+        buf.put(ident);
+
+        // AUTH CERTIFICATE
+        buf.put((byte)3);
+        buf.putShort((short)auth.length);
+        buf.put(auth);
+
+        buf.flip();
+        byte certsCell[] = new byte[buf.limit()];
+        buf.get(certsCell);
+        sendCell(0, Cell.CERTS, certsCell);
+    }
     /**
      * Called for each new client connection - instantiating a new object
      *
@@ -54,6 +133,7 @@ public class TorServerSocket extends TorSocket {
      * @throws IOException
      */
     private TorServerSocket(final Socket client) throws IOException {
+        this.sslsocket = (javax.net.ssl.SSLSocket) client;
         in = client.getInputStream();
         out = client.getOutputStream();
 
@@ -78,20 +158,21 @@ public class TorServerSocket extends TorSocket {
                             if(offeredVer <= PROTOCOL_VERSION_MAX && offeredVer > PROTOCOL_VERSION)
                                 PROTOCOL_VERSION = offeredVer;
                         }
-                        System.out.println("Negotiated protocol version: " + PROTOCOL_VERSION);
+                        log.info("Negotiated protocol version: " + PROTOCOL_VERSION);
+                        sendCertsCell();
                         sendNetInfo();
                         continue;
 
                     case Cell.CREATED:
-                        System.out.println("Got created cell - not impl!");
+                        log.error("Got created cell - not impl!");
                         continue;
 
                     default:
-                        System.out.println("[UNHANDLED] Got cell cmd "+c.cmdId);
+                        log.info("[UNHANDLED] Got cell cmd " + c.cmdId);
                         continue;
                 }
             } catch (IOException e) {
-                System.out.println("Closing tor client connection: " + e);
+                log.error("Closing tor client connection: " + e);
                 break;
             }
         }
