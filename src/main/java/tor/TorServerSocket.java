@@ -29,6 +29,12 @@ import java.security.interfaces.RSAPublicKey;
  */
 public class TorServerSocket extends TorSocket {
     final static Logger log = LogManager.getLogger();
+    static X509Certificate identityCert;
+    static RSAPublicKey identityPubKey;
+    static RSAPrivateKey identityPrivKey;
+    static X509Certificate linkCert;
+    static X509Certificate authCert;
+
     /**
      * Sets up port listener
      *
@@ -40,7 +46,7 @@ public class TorServerSocket extends TorSocket {
         Security.addProvider(new BouncyCastleProvider());
         SSLContext sc;
 
-        if(!new File("keys/keystore.jks").exists()) {
+        if (!new File("keys/keystore.jks").exists()) {
             log.fatal("keys/keystore.jks not found.  Make sure you run certgen.sh in keys/");
             System.exit(1);
         }
@@ -53,20 +59,34 @@ public class TorServerSocket extends TorSocket {
         // connect
         ServerSocket listenSocket = SSLServerSocketFactory.getDefault().createServerSocket(localPort);
 
-        while(true) {
+        while (true) {
             Socket client = listenSocket.accept();
-            System.out.println("New client connection from "+client.getRemoteSocketAddress());
+            System.out.println("New client connection from " + client.getRemoteSocketAddress());
 
             new TorServerSocket(client);
 
         }
     }
 
-    static X509Certificate identityCert;
-    static RSAPublicKey identityPubKey;
-    static RSAPrivateKey identityPrivKey;
-    static X509Certificate linkCert;
-    static X509Certificate authCert;
+    /**
+     * Called for each new client connection - instantiating a new object
+     *
+     * @param client
+     * @throws IOException
+     */
+    private TorServerSocket(final Socket client) throws IOException {
+        this.sslsocket = (javax.net.ssl.SSLSocket) client;
+        in = client.getInputStream();
+        out = client.getOutputStream();
+
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                receiveHandlerLoop();
+            }
+        }).start();
+    }
+
     public void loadKeys() {
         try {
             FileInputStream idCertIS = new FileInputStream(new File("keys/identity.crt"));
@@ -75,11 +95,11 @@ public class TorServerSocket extends TorSocket {
             CertificateFactory cf = null;
             cf = CertificateFactory.getInstance("X.509");
             identityCert = (X509Certificate) cf.generateCertificate(idCertIS);
-            log.info("Our Identity Cert Digest: "+Hex.toHexString(TorCrypto.getSHA1().digest(TorCrypto.publicKeyToASN1((RSAPublicKey) identityCert.getPublicKey()))));
+            log.info("Our Identity Cert Digest: " + Hex.toHexString(TorCrypto.getSHA1().digest(TorCrypto.publicKeyToASN1((RSAPublicKey) identityCert.getPublicKey()))));
             linkCert = (X509Certificate) cf.generateCertificate(linkCertIS);
-            log.info("Our Link Cert Digest: "+Hex.toHexString(TorCrypto.getSHA1().digest(TorCrypto.publicKeyToASN1((RSAPublicKey) linkCert.getPublicKey()))));
+            log.info("Our Link Cert Digest: " + Hex.toHexString(TorCrypto.getSHA1().digest(TorCrypto.publicKeyToASN1((RSAPublicKey) linkCert.getPublicKey()))));
             authCert = (X509Certificate) cf.generateCertificate(authCertIS);
-            log.info("Our Auth Cert Digest: "+Hex.toHexString(TorCrypto.getSHA1().digest(TorCrypto.publicKeyToASN1((RSAPublicKey) authCert.getPublicKey()))));
+            log.info("Our Auth Cert Digest: " + Hex.toHexString(TorCrypto.getSHA1().digest(TorCrypto.publicKeyToASN1((RSAPublicKey) authCert.getPublicKey()))));
             identityPubKey = (RSAPublicKey) identityCert.getPublicKey();
 
             FileReader in = new FileReader("keys/identity.key");
@@ -92,7 +112,7 @@ public class TorServerSocket extends TorSocket {
 
     public void sendCertsCell() throws IOException {
         ByteBuffer buf = ByteBuffer.allocate(4096);
-        buf.put((byte)2);
+        buf.put((byte) 3);
 
         byte[] link;
         byte[] ident, auth;
@@ -117,32 +137,14 @@ public class TorServerSocket extends TorSocket {
         buf.put(ident);
 
         // AUTH CERTIFICATE
-//        buf.put((byte)3);
-//        buf.putShort((short)auth.length);
-//        buf.put(auth);
+        buf.put((byte) 3);
+        buf.putShort((short) auth.length);
+        buf.put(auth);
 
         buf.flip();
         byte certsCell[] = new byte[buf.limit()];
         buf.get(certsCell);
         sendCell(0, Cell.CERTS, certsCell);
-    }
-    /**
-     * Called for each new client connection - instantiating a new object
-     *
-     * @param client
-     * @throws IOException
-     */
-    private TorServerSocket(final Socket client) throws IOException {
-        this.sslsocket = (javax.net.ssl.SSLSocket) client;
-        in = client.getInputStream();
-        out = client.getOutputStream();
-
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                receiveHandlerLoop();
-            }
-        }).start();
     }
 
     public void receiveHandlerLoop() {
