@@ -37,6 +37,7 @@ public class OnionRouter {
     public String identityhash;
     public HashSet<String> flags = new HashSet<>();
     public byte[] pubKeyraw;
+    public byte[] signKeyraw;
     public String consensusIPv4ExitPortSummary = null;
     public String[] descriptorIPv4ExitPolicy = null;
     public String[] parsedIPv4ExitPortList = null;
@@ -56,6 +57,7 @@ public class OnionRouter {
 
         pubKeyraw = Base64.decodeBase64(rdr.getItem("onion-key"));
         pubKey = TorCrypto.asn1GetPublicKey(pubKeyraw);
+        signKeyraw = Base64.decodeBase64(rdr.getItem("signing-key"));
 
         return pubKey;
     }

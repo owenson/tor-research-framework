@@ -32,7 +32,7 @@ public class TorServerSocket extends TorSocket {
      * @param localPort
      * @throws IOException
      */
-    public TorServerSocket(int localPort) throws IOException, NoSuchAlgorithmException {
+    public TorServerSocket(int localPort) throws IOException, NoSuchAlgorithmException, CertificateEncodingException {
 
         Security.addProvider(new BouncyCastleProvider());
         SSLContext sc;
@@ -44,14 +44,8 @@ public class TorServerSocket extends TorSocket {
 
         System.setProperty("javax.net.ssl.keyStore", "keys/keystore.jks");
         System.setProperty("javax.net.ssl.keyStorePassword", "123456");
-
+//149A17B774002FEB90048779432B0828B29EA213 but got ============ CF35FF36FAB07773D147F481EB72AD2C3209AB57
         loadKeys();
-        byte[] myPubKeyRaw = TorCrypto.publicKeyToASN1(identityPubKey);
-        byte identity[] = TorCrypto.getSHA1().digest(myPubKeyRaw);
-        System.out.println("Server Identity: "+Hex.toHexString(identity));
-        System.out.println("Server PubKey (ASN.1): "+Hex.toHexString(myPubKeyRaw));
-        System.out.println(TorCrypto.asn1GetPublicKey(myPubKeyRaw));
-        System.out.println(identityPrivKey.getModulus());
 
         // connect
         ServerSocket listenSocket = SSLServerSocketFactory.getDefault().createServerSocket(localPort);
@@ -78,8 +72,11 @@ public class TorServerSocket extends TorSocket {
             CertificateFactory cf = null;
             cf = CertificateFactory.getInstance("X.509");
             identityCert = (X509Certificate) cf.generateCertificate(idCertIS);
+            log.info("Identity Cert Digest: "+Hex.toHexString(TorCrypto.getSHA1().digest(identityCert.getPublicKey().getEncoded())));
             linkCert = (X509Certificate) cf.generateCertificate(linkCertIS);
+            log.info("Link Cert Digest: "+Hex.toHexString(TorCrypto.getSHA1().digest(linkCert.getPublicKey().getEncoded())));
             authCert = (X509Certificate) cf.generateCertificate(authCertIS);
+            log.info("Auth Cert Digest: "+Hex.toHexString(TorCrypto.getSHA1().digest(authCert.getPublicKey().getEncoded())));
             identityPubKey = (RSAPublicKey) identityCert.getPublicKey();
 
             FileReader in = new FileReader("keys/identity.key");
@@ -92,7 +89,7 @@ public class TorServerSocket extends TorSocket {
 
     public void sendCertsCell() throws IOException {
         ByteBuffer buf = ByteBuffer.allocate(4096);
-        buf.put((byte)3);
+        buf.put((byte)2);
 
         byte[] link;
         byte[] ident, auth;
@@ -117,9 +114,9 @@ public class TorServerSocket extends TorSocket {
         buf.put(ident);
 
         // AUTH CERTIFICATE
-        buf.put((byte)3);
-        buf.putShort((short)auth.length);
-        buf.put(auth);
+//        buf.put((byte)3);
+//        buf.putShort((short)auth.length);
+//        buf.put(auth);
 
         buf.flip();
         byte certsCell[] = new byte[buf.limit()];
