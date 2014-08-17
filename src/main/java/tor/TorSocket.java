@@ -27,6 +27,7 @@ import tor.util.TrustAllManager;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.TrustManager;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -36,6 +37,10 @@ import java.nio.ByteOrder;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.Security;
+import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
+import java.util.HashMap;
 import java.util.TreeMap;
 
 public class TorSocket {
@@ -134,6 +139,36 @@ public class TorSocket {
         sendCell(0, Cell.NETINFO, nibuf);
     }
 
+    HashMap<Integer, X509Certificate> remoteCerts = new HashMap<>();
+
+    /**
+     * Receive CERTS cell from remote host and put in remoteCerts hash-map.
+     * Type 1 = LINK, 2 = ID, 3 = AUTH
+     * @param certsCell
+     */
+    public void recvCerts(Cell certsCell) {
+        ByteBuffer buf = ByteBuffer.wrap(certsCell.payload);
+        int numCerts = buf.get() & 0xff;
+
+        for (int i = 0; i < numCerts; i++) {
+            int type=buf.get() & 0xff;
+            int len = buf.getShort();
+            System.out.println("Cert: "+type+" Len: "+len);
+            byte[] cert = new byte[len];
+            buf.get(cert);
+
+            CertificateFactory cf = null;
+            try {
+                cf = CertificateFactory.getInstance("X.509");
+                X509Certificate xCert = (X509Certificate) cf.generateCertificate(new ByteArrayInputStream(cert));
+                //String ident = Hex.encodeHexString(TorCrypto.getSHA1().digest(TorCrypto.publicKeyToASN1((java.security.interfaces.RSAPublicKey) xCert.getPublicKey())));
+                log.debug("Got certificate of type "+type);
+                remoteCerts.put(type, xCert);
+            } catch (CertificateException e) {
+                e.printStackTrace();
+            }
+        }
+    }
     public void setState(STATES newState) {
         log.trace("New State {} (oldState {})", newState, this.state);
 
@@ -158,6 +193,9 @@ public class TorSocket {
                         log.trace("Got NETINFO Sending NETINFO");
                         sendNetInfo();
                         setState(STATES.READY);
+                        continue;
+                    case Cell.CERTS:
+                        recvCerts(c);
                         continue;
                 }
                 TorCircuit circ = circuits.get(new Long(c.circId));

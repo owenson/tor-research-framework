@@ -22,7 +22,7 @@ public class GarethTmpTest {
             }
         };
 
-        OnionRouter resfwserver = new OnionRouter("resfw", "149a17b774002feb90048779432b0828b29ea213", "127.0.0.1", 9999, 0) {
+        OnionRouter resfwserver = new OnionRouter("resfw", "CF35FF36FAB07773D147F481EB72AD2C3209AB57", "127.0.0.1", 9999, 0) {
             @Override
             public PublicKey getPubKey() throws IOException {
                 return TorCrypto.asn1GetPublicKey(Hex.decode("308188028180b688aa6b6222bb9dadd4e33a9176c35ca81196cbd80aec8046cbdfc92050363450bfbda3c93c086bda6e62e4f0033c041746f81ed5bc304fd501444d8f47ee249425955267689787d7997734014575b75fcb658d46beea36b82e4b28824e7f4e4ba880051cae34e0d973dc4e04edbbe392f76274d5ade909d42e3e63217b50f90203010001"));

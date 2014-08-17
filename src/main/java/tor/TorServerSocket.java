@@ -1,5 +1,7 @@
 package tor;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.bouncycastle.asn1.pkcs.RSAPrivateKey;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.util.encoders.Hex;
@@ -26,6 +28,7 @@ import java.security.interfaces.RSAPublicKey;
  * Created by gho on 03/08/14.
  */
 public class TorServerSocket extends TorSocket {
+    final static Logger log = LogManager.getLogger();
     /**
      * Sets up port listener
      *
@@ -72,11 +75,11 @@ public class TorServerSocket extends TorSocket {
             CertificateFactory cf = null;
             cf = CertificateFactory.getInstance("X.509");
             identityCert = (X509Certificate) cf.generateCertificate(idCertIS);
-            log.info("Identity Cert Digest: "+Hex.toHexString(TorCrypto.getSHA1().digest(identityCert.getPublicKey().getEncoded())));
+            log.info("Our Identity Cert Digest: "+Hex.toHexString(TorCrypto.getSHA1().digest(TorCrypto.publicKeyToASN1((RSAPublicKey) identityCert.getPublicKey()))));
             linkCert = (X509Certificate) cf.generateCertificate(linkCertIS);
-            log.info("Link Cert Digest: "+Hex.toHexString(TorCrypto.getSHA1().digest(linkCert.getPublicKey().getEncoded())));
+            log.info("Our Link Cert Digest: "+Hex.toHexString(TorCrypto.getSHA1().digest(TorCrypto.publicKeyToASN1((RSAPublicKey) linkCert.getPublicKey()))));
             authCert = (X509Certificate) cf.generateCertificate(authCertIS);
-            log.info("Auth Cert Digest: "+Hex.toHexString(TorCrypto.getSHA1().digest(authCert.getPublicKey().getEncoded())));
+            log.info("Our Auth Cert Digest: "+Hex.toHexString(TorCrypto.getSHA1().digest(TorCrypto.publicKeyToASN1((RSAPublicKey) authCert.getPublicKey()))));
             identityPubKey = (RSAPublicKey) identityCert.getPublicKey();
 
             FileReader in = new FileReader("keys/identity.key");
