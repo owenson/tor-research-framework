@@ -41,23 +41,20 @@ public class Consensus {
     // The maximum number of connection tries to directory caches before falling back to authorities
     // TODO: we could do this much better with a setter method - on the class or object?
     public static int MAX_TRIES = 10;
-
+    private static Consensus consensus = null;
+    /**
+     * A map containing the parsed consensus (String is identity as a hex string)
+     */
+    public TreeMap<String, OnionRouter> routers = new TreeMap<>();
     /**
      * Whether to use only the directory authorities to fetch the consensus and router descriptors?
      * Otherwise, will fetch from any directory node.
      */
     boolean useOnlyAuthorities = false;
-
-    /**
-     * A map containing the parsed consensus (String is identity as a hex string)
-     */
-    public TreeMap<String, OnionRouter> routers = new TreeMap<>();
-
     /**
      * Date that the consensus is valid until - it's your responsibility to refetch this if you need to.
      */
     Date consensusValidUntil = null;
-
     String authorities[] = {"moria1 orport=9101 v3ident=D586D18309DED4CD6D57C18FDB97EFA96D330566 128.31.0.39:9131 9695 DFC3 5FFE B861 329B 9F1A B04C 4639 7020 CE31",
             "tor26 orport=443 v3ident=14C131DFC5C6F93646BE72FA1401C02A8DF2E8B4 86.59.21.38:80 847B 1F85 0344 D787 6491 A548 92F9 0493 4E4E B85D",
             "dizum orport=443 v3ident=E8A9C45EDE6D711294FADF8E7951F4DE6CA56B58 194.109.206.212:80 7EA6 EAD6 FD83 083C 538F 4403 8BBF A077 587D D755",
@@ -70,10 +67,6 @@ public class Consensus {
             "Faravahar orport=443 v3ident=EFCBE720AB3A82B99F9E953CD5BF50F7EEFC7B97 154.35.32.5:80 CF6D 0AAF B385 BE71 B8E1 11FC 5CFF 4B47 9237 33BC"
     };
 
-    public void setUseOnlyAuthorities(boolean useOnlyAuthorities) {
-        this.useOnlyAuthorities = useOnlyAuthorities;
-    }
-
 
     /**
      * Private constructor to stop instantiation outside of this class.
@@ -82,6 +75,34 @@ public class Consensus {
      * @throws RuntimeException
      */
     private Consensus() {
+    }
+
+    /**
+     * Return a consensus, populating it if needed
+     *
+     * @return populated Consensus
+     */
+    public static Consensus getConsensus() throws RuntimeException {
+        return getConsensus(false);
+    }
+
+    /**
+     * Return an updated, new consensus, leaving existing consensus references as-is;
+     * or return the existing consensus object with existing data
+     *
+     * @param forceNewConsensus whether to refetch a few consensus instead of using cached one
+     * @return populated Consensus
+     */
+    public static Consensus getConsensus(boolean forceNewConsensus) throws RuntimeException {
+        if (consensus == null || forceNewConsensus) {
+            consensus = new Consensus();
+            consensus.fetchConsensus(forceNewConsensus);
+        }
+        return consensus;
+    }
+
+    public void setUseOnlyAuthorities(boolean useOnlyAuthorities) {
+        this.useOnlyAuthorities = useOnlyAuthorities;
     }
 
     /**
@@ -165,7 +186,7 @@ public class Consensus {
                 URL zurl = new URL("http://" + address + ":" + port + path + ".z");
                 log.debug("Downloading (from directory server): " + zurl.toString());
                 return new InflaterInputStream(zurl.openStream());
-            } catch(SocketException e) {
+            } catch (SocketException e) {
                 log.warn("Failed to connect: " + e);
                 throw e;
             } catch (IOException e) {
@@ -176,7 +197,7 @@ public class Consensus {
 
         log.debug("Downloading: " + url.toString());
         InputStream in = url.openStream();
-        if(path.endsWith(".z"))
+        if (path.endsWith(".z"))
             return new InflaterInputStream(in);
         return in;
     }
@@ -190,26 +211,26 @@ public class Consensus {
      */
     public void fetchAllDescriptors() throws IOException {
         BufferedReader in = new BufferedReader(new InputStreamReader(getDirectoryStream("/tor/server/all.z")));
-        String ln, descriptor="";
+        String ln, descriptor = "";
 
-        while(true){
+        while (true) {
             ln = in.readLine();
-            if(ln == null || ln.startsWith("router ")) { // read a whole router descriptor
-                if(!descriptor.isEmpty()) { // parse it and extract keys
+            if (ln == null || ln.startsWith("router ")) { // read a whole router descriptor
+                if (!descriptor.isEmpty()) { // parse it and extract keys
                     TorDocumentParser tdp = new TorDocumentParser(descriptor);
 
                     String fprint = StringUtils.replace(tdp.getItem("fingerprint"), "\\s+", "");
-                    if(fprint!=null && consensus.routers.containsKey(fprint)) {
+                    if (fprint != null && consensus.routers.containsKey(fprint)) {
                         OnionRouter or = consensus.routers.get(fprint);
-                        or.pubKeyraw = Base64.decodeBase64(tdp.getItem("onion-key"));
-                        or.pubKey = TorCrypto.asn1GetPublicKey(or.pubKeyraw);
+                        or.onionKeyRaw = Base64.decodeBase64(tdp.getItem("onion-key"));
+                        or.onionKey = TorCrypto.asn1GetPublicKey(or.onionKeyRaw);
                     }
                 }
                 descriptor = "";
-                if(ln == null)
+                if (ln == null)
                     break;
             }
-            descriptor+=ln + "\n";
+            descriptor += ln + "\n";
         }
 
     }
@@ -295,32 +316,6 @@ public class Consensus {
         }
 
         return true;
-    }
-
-    private static Consensus consensus = null;
-
-    /**
-     * Return a consensus, populating it if needed
-     *
-     * @return populated Consensus
-     */
-    public static Consensus getConsensus() throws RuntimeException {
-        return getConsensus(false);
-    }
-
-    /**
-     * Return an updated, new consensus, leaving existing consensus references as-is;
-     * or return the existing consensus object with existing data
-     *
-     * @param forceNewConsensus whether to refetch a few consensus instead of using cached one
-     * @return populated Consensus
-     */
-    public static Consensus getConsensus(boolean forceNewConsensus) throws RuntimeException {
-        if (consensus == null || forceNewConsensus) {
-            consensus = new Consensus();
-            consensus.fetchConsensus(forceNewConsensus);
-        }
-        return consensus;
     }
 
     public OnionRouter getRouterByName(String nm) {
@@ -428,7 +423,7 @@ public class Consensus {
         TreeMap<String, OnionRouter> map = getORsWithFlag(flags, excludeBadExits);
         OnionRouter ors[] = map.values().toArray(new OnionRouter[map.size()]);
         boolean acceptsExitPort = false;
-        int idx=TorCrypto.rnd.nextInt(ors.length);
+        int idx = TorCrypto.rnd.nextInt(ors.length);
 
         // ignore exitPort 0
         if (exitPort != 0) {
@@ -445,7 +440,7 @@ public class Consensus {
     /**
      * Query a random directory (cache) for the router descriptor(s) corresponding to hash
      *
-     * @param hash           the routers' fingerprint hash(es), separated by "+"
+     * @param hash the routers' fingerprint hash(es), separated by "+"
      * @return the descriptor(s) downloaded from a random directory (cache)
      */
     public String getRouterDescriptor(String hash) throws IOException {
@@ -455,9 +450,9 @@ public class Consensus {
     /**
      * Query the specified directory for the router descriptor(s) corresponding to hash
      *
-     * @param hash           the routers' fingerprint hash(es), separated by "+"
-     * @param address        a String containing the DNS name or IP address for the directory (cache)
-     * @param port           a String containing the port for the directory (cache)
+     * @param hash    the routers' fingerprint hash(es), separated by "+"
+     * @param address a String containing the DNS name or IP address for the directory (cache)
+     * @param port    a String containing the port for the directory (cache)
      * @return the descriptor(s) downloaded from the specified directory (cache)
      */
     public String getRouterDescriptor(String hash, String address, String port) throws IOException {
@@ -467,9 +462,9 @@ public class Consensus {
     /**
      * Query the specified directory for the router descriptor(s) corresponding to hash
      *
-     * @param hash           the routers' fingerprint hash(es), separated by "+"
-     * @param address        the InetAddress for the directory (cache)
-     * @param port           the int port for the directory (cache)
+     * @param hash    the routers' fingerprint hash(es), separated by "+"
+     * @param address the InetAddress for the directory (cache)
+     * @param port    the int port for the directory (cache)
      * @return the descriptor(s) downloaded from the specified directory (cache)
      */
     public String getRouterDescriptor(String hash, InetAddress address, int port) throws IOException {

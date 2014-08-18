@@ -212,7 +212,7 @@ public class TorCircuit {
         // generate pub key
         BigInteger pubKey = TorCrypto.DH_G.modPow(temp_x, TorCrypto.DH_P);
         byte pubKeyByte[] = TorCrypto.BNtoByte(pubKey);
-        return TorCrypto.hybridEncrypt(pubKeyByte, r.getPubKey());
+        return TorCrypto.hybridEncrypt(pubKeyByte, r.getOnionKey());
     }
 
     /**
