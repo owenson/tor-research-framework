@@ -101,6 +101,15 @@ public class Consensus {
         return consensus;
     }
 
+    /**
+     * Whether the consensus represented by this object is valid?  If not, it needs refetching.
+     *
+     * @return whether valid
+     */
+    public boolean isValid() {
+        return consensusValidUntil.before(new Date()) ? false : true;
+    }
+
     public void setUseOnlyAuthorities(boolean useOnlyAuthorities) {
         this.useOnlyAuthorities = useOnlyAuthorities;
     }
