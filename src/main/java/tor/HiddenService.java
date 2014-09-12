@@ -42,6 +42,7 @@ import java.util.TreeMap;
  */
 public class HiddenService {
     final static Logger log = LogManager.getLogger();
+
     // onion as base32 encoded, replica=[0,1],
     public static byte[] getDescId(String onion, byte replica) {
         byte[] onionbin = new Base32().decode(onion.toUpperCase());
@@ -202,8 +203,8 @@ public class HiddenService {
         } catch (DecoderException e) {
             e.printStackTrace();
         }
-        handshake.putShort((short) rendzOR.pubKeyraw.length);  // rendz key len
-        handshake.put(rendzOR.pubKeyraw); // rendz key
+        handshake.putShort((short) rendzOR.onionKeyRaw.length);  // rendz key len
+        handshake.put(rendzOR.onionKeyRaw); // rendz key
         handshake.put(rendz.rendezvousCookie);  //rend cookie
 
         // tap handshake / create handshake

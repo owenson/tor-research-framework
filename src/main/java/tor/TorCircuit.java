@@ -35,13 +35,6 @@ import java.util.TreeMap;
 
 public class TorCircuit {
 
-    final static Logger log = LogManager.getLogger();
-
-    private static int circId_counter = 1;
-    long circId = 0;
-
-    public static short streamId_counter = 1;
-
     public static final int RELAY_BEGIN = 1;
     public static final int RELAY_DATA = 2;
     public static final int RELAY_END = 3;
@@ -55,7 +48,6 @@ public class TorCircuit {
     public static final int RELAY_RESOLVE = 11;
     public static final int RELAY_RESOLVED = 12;
     public static final int RELAY_BEGIN_DIR = 13;
-
     public static final int RELAY_COMMAND_ESTABLISH_INTRO = 32;
     public static final int RELAY_COMMAND_ESTABLISH_RENDEZVOUS = 33;
     public static final int RELAY_COMMAND_INTRODUCE1 = 34;
@@ -65,27 +57,32 @@ public class TorCircuit {
     public static final int RELAY_COMMAND_INTRO_ESTABLISHED = 38;
     public static final int RELAY_COMMAND_RENDEZVOUS_ESTABLISHED = 39;
     public static final int RELAY_COMMAND_INTRODUCE_ACK = 40;
-
+    final static Logger log = LogManager.getLogger();
+    public static short streamId_counter = 1;
+    public static String[] DESTROY_ERRORS = {"NONE", "PROTOCOL", "INTERNAL", "REQUESTED", "HIBERNATING",
+            "RESOURCELIMIT", "CONNECTFAILED", "OR_IDENTITY", "OR_CONN_CLOSED",
+            "FINISHED", "TIMEOUT", "DESTROYED", "NOSUCHSERVICE"};
+    public static String[] STREAM_ERRORS = {"-", "REASON_MISC", "REASON_RESOLVEFAILED", "REASON_CONNECTREFUSED",
+            "REASON_EXITPOLICY", "REASON_DESTROY", "REASON_DONE", "REASON_TIMEOUT",
+            "REASON_NOROUTE", "REASON_HIBERNATING", "REASON_INTERNAL",
+            "REASON_RESOURCELIMIT", "REASON_CONNRESET", "REASON_TORPROTOCOL",
+            "REASON_NOTDIRECTORY"};
+    private static int circId_counter = 1;
     // temp vars for created/extended
     public BigInteger temp_x;
     public OnionRouter temp_r;
-
-    public void setBlocking(boolean blocking) {
-        this.blocking = blocking;
-    }
-
-    boolean blocking = false;
-
-    // this circuit hop
-    private LinkedList<OnionRouter> circuitToBuild = new LinkedList<>();
-    private ArrayList<TorHop> hops = new ArrayList<>();
-
-    public enum STATES {NONE, CREATING, EXTENDING, READY, DESTROYED, RENDEZVOUS_WAIT, RENDEZVOUS_ESTABLISHED, RENDEZVOUS_COMPLETE, INTRODUCED}
-
     public STATES state = STATES.NONE;
-    private Object stateNotify = new Object();
-
-
+    public byte[] rendezvousCookie = new byte[20];
+    /**
+     * Handles cell for this circuit
+     *
+     * @param c Cell to handle
+     * @return Successfully handled
+     */
+    public long receiveWindow = 1000;
+    public long sendWindow = 1000;
+    long circId = 0;
+    boolean blocking = false;
     // list of active streams for this circuit
     TreeMap<Integer, TorStream> streams = new TreeMap<>();
     // streams with packets to send
@@ -95,11 +92,25 @@ public class TorCircuit {
     //UniqueQueue <TorStream> streamsSending = new UniqueQueue<TorStream>();
 
     TorSocket sock;
+    /**
+     * Gererates a relay cell, encrypts and sends it
+     *
+     * @param payload Relay payload
+     * @param relaytype Type of relay cell (see RELAY_)
+     * @param early Whether to use an early cell (needed for EXTEND only)
+     * @param stream Stream ID
+     */
+    long sentPackets = 0;
+    long sentBytes = 0;
+    // this circuit hop
+    private LinkedList<OnionRouter> circuitToBuild = new LinkedList<>();
+    private ArrayList<TorHop> hops = new ArrayList<>();
+    private Object stateNotify = new Object();
 
     public TorCircuit(TorSocket sock) {
         circId = circId_counter++;
         // in proto version 4 or higher, the MSB bit of the circId must be one for the initiator (aka, us).
-        if(sock.PROTOCOL_VERSION >= 4)
+        if (sock.PROTOCOL_VERSION >= 4)
             circId |= 0x80000000;
         this.sock = sock;
     }
@@ -107,6 +118,10 @@ public class TorCircuit {
     public TorCircuit(int cid, TorSocket sock) {
         circId = cid;
         this.sock = sock;
+    }
+
+    public void setBlocking(boolean blocking) {
+        this.blocking = blocking;
     }
 
     public void setState(STATES newState) {
@@ -197,7 +212,7 @@ public class TorCircuit {
         // generate pub key
         BigInteger pubKey = TorCrypto.DH_G.modPow(temp_x, TorCrypto.DH_P);
         byte pubKeyByte[] = TorCrypto.BNtoByte(pubKey);
-        return TorCrypto.hybridEncrypt(pubKeyByte, r.getPubKey());
+        return TorCrypto.hybridEncrypt(pubKeyByte, r.getOnionKey());
     }
 
     /**
@@ -380,17 +395,6 @@ public class TorCircuit {
         return st;
     }
 
-    /**
-     * Gererates a relay cell, encrypts and sends it
-     *
-     * @param payload Relay payload
-     * @param relaytype Type of relay cell (see RELAY_)
-     * @param early Whether to use an early cell (needed for EXTEND only)
-     * @param stream Stream ID
-     */
-    long sentPackets = 0;
-    long sentBytes = 0;
-
     // must be synchronised due to hash calculation - out of sync = bad
     public synchronized void send(byte[] payload, int relaytype, boolean early, short stream) throws IOException {
         if (state == STATES.DESTROYED) {
@@ -406,8 +410,6 @@ public class TorCircuit {
         sentPackets++;
         sentBytes += relcell.length;
     }
-
-    public byte[] rendezvousCookie = new byte[20];
 
     public void rendezvousSetup() throws IOException {
         TorCrypto.rnd.nextBytes(rendezvousCookie);
@@ -441,25 +443,6 @@ public class TorCircuit {
         return buf;
     }
 
-    /**
-     * Handles cell for this circuit
-     *
-     * @param c Cell to handle
-     * @return Successfully handled
-     */
-    public long receiveWindow = 1000;
-    public long sendWindow = 1000;
-
-    private static String[] DESTROY_ERRORS = {"NONE", "PROTOCOL", "INTERNAL", "REQUESTED", "HIBERNATING",
-            "RESOURCELIMIT", "CONNECTFAILED", "OR_IDENTITY", "OR_CONN_CLOSED",
-            "FINISHED", "TIMEOUT", "DESTROYED", "NOSUCHSERVICE"};
-
-    private static String[] STREAM_ERRORS = {"-", "REASON_MISC", "REASON_RESOLVEFAILED", "REASON_CONNECTREFUSED",
-            "REASON_EXITPOLICY", "REASON_DESTROY", "REASON_DONE", "REASON_TIMEOUT",
-            "REASON_NOROUTE", "REASON_HIBERNATING", "REASON_INTERNAL",
-            "REASON_RESOURCELIMIT", "REASON_CONNRESET", "REASON_TORPROTOCOL",
-            "REASON_NOTDIRECTORY"};
-
     public boolean handleCell(Cell c) throws IOException {
         boolean handled = false;
 
@@ -487,7 +470,7 @@ public class TorCircuit {
 
             handled = true;
         } else if (c.cmdId == Cell.RELAY_EARLY || c.cmdId == Cell.PADDING || c.cmdId == Cell.VPADDING) { // these are used in deanon attacks
-            log.error("WARNING**** cell CMD "+c.cmdId+" received in - Possible DEANON attack!!: Route: "+hops.toArray());
+            log.error("WARNING**** cell CMD " + c.cmdId + " received in - Possible DEANON attack!!: Route: " + hops.toArray());
         } else if (c.cmdId == Cell.RELAY) // relay cell
         {
             // cell decrypt logic - decrypt from each hop in turn checking recognised and digest until success
@@ -554,15 +537,14 @@ public class TorCircuit {
         return handled;
     }
 
-    /***
+    /**
      * Handles a decrypted relay cell
      *
-     * @param cmdId RELAY_* command ID
+     * @param cmdId    RELAY_* command ID
      * @param streamId Stream ID
-     * @param fromHop Received from which hop in circuit, e.g., 0,1,2..
-     * @param payload Decrypted payload
+     * @param fromHop  Received from which hop in circuit, e.g., 0,1,2..
+     * @param payload  Decrypted payload
      * @return whether handled or not
-     *
      * @throws IOException
      */
     public boolean handleRelayCell(int cmdId, int streamId, int fromHop, byte[] payload) throws IOException {
@@ -580,7 +562,7 @@ public class TorCircuit {
 
         switch (cmdId) {
             case RELAY_DROP:
-                log.warn("WARNING**** _relay_ cell CMD DROP received - Possible DEANON attack!!: Route: "+hops.toArray());
+                log.warn("WARNING**** _relay_ cell CMD DROP received - Possible DEANON attack!!: Route: " + hops.toArray());
                 break;
 
             case RELAY_COMMAND_INTRODUCE_ACK:
@@ -650,5 +632,7 @@ public class TorCircuit {
         return true;
 
     }
+
+    public enum STATES {NONE, CREATING, EXTENDING, READY, DESTROYED, RENDEZVOUS_WAIT, RENDEZVOUS_ESTABLISHED, RENDEZVOUS_COMPLETE, INTRODUCED}
 
 }

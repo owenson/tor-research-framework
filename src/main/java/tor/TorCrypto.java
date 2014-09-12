@@ -29,8 +29,11 @@ import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
+import java.io.IOException;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
 import java.security.*;
+import java.security.interfaces.RSAPublicKey;
 import java.security.spec.RSAPublicKeySpec;
 
 public class TorCrypto {
@@ -259,4 +262,59 @@ public class TorCrypto {
         }
     }
 
+    public static byte [] publicKeyToASN1(RSAPublicKey pk) throws IOException {
+        byte[] modulus = pk.getModulus().toByteArray();
+        byte[] pubexp = pk.getPublicExponent().toByteArray();
+
+        ByteBuffer inner = ByteBuffer.allocate(1024);
+        inner.put((byte)2); // Integer
+        inner.put((byte)0x81); // one byte size
+        inner.put((byte)modulus.length); // one byte size
+        inner.put(modulus);
+
+        inner.put((byte)2); // Integer
+        //inner.put((byte)0x81); // one byte size
+        inner.put((byte)pubexp.length); // one byte size
+        inner.put(pubexp);
+        inner.flip();
+
+        ByteBuffer outer = ByteBuffer.allocate(1024);
+        outer.put((byte)0x30); // SEQUENCE
+        outer.put((byte)0x81); // one byte size
+        outer.put((byte)inner.limit()); // one byte size
+        outer.put(inner);
+        outer.flip();
+
+        byte asn[] = new byte[outer.limit()];
+        outer.get(asn);
+        return asn;
+    }
+
+//    public static byte [] publicKeyToPKCS1(RSAPublicKey pk) throws IOException {
+//        byte pkbits[] = publicKeyToASN1(pk);
+//
+//        ByteBuffer buf = ByteBuffer.allocate(1024);
+//        buf.put(new byte[] {0x30, 0x0d, //<- a SEQUENCE with 0d bytes
+//                0x06, 0x09, 0x2a, (byte)0x86, 0x48, (byte)0x86, (byte)0xf7, 0x0d, 0x01, 0x01, 0x01,  //<- OID 1.2.840.113549.1.1.1
+//                0x05, 0x00}); // NULL
+//        buf.put(new byte[] {0x03, (byte)0x81, (byte)pkbits.length, 0x00} ); // bit string
+//        buf.put(pkbits); // public key bits as a sequence
+//
+//        buf.flip();
+//
+//        //overall sequence header
+//        ByteBuffer outer = ByteBuffer.allocate(256);
+//        outer.put((byte)0x30);
+//        outer.put((byte)0x81);
+//        outer.put((byte)buf.limit());
+//        outer.put(buf);
+//        outer.flip();
+//
+//        byte out[] = new byte[outer.limit()];
+//        outer.get(out);
+//        return out;
+//
+//
+//
+//    }
 }

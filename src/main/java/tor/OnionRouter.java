@@ -29,17 +29,18 @@ import java.security.PublicKey;
 import java.util.HashSet;
 
 public class OnionRouter {
+    public String identityhash;
+    public HashSet<String> flags = new HashSet<>();
+    public byte[] onionKeyRaw;
+    public byte[] signKeyRaw;
+    public String consensusIPv4ExitPortSummary = null;
+    public String[] descriptorIPv4ExitPolicy = null;
+    public String[] parsedIPv4ExitPortList = null;
     String name;
     InetAddress ip;
     int orport;
     int dirport;
-    PublicKey pubKey = null;
-    public String identityhash;
-    public HashSet<String> flags = new HashSet<>();
-    public byte[] pubKeyraw;
-    public String consensusIPv4ExitPortSummary = null;
-    public String[] descriptorIPv4ExitPolicy = null;
-    public String[] parsedIPv4ExitPortList = null;
+    PublicKey onionKey = null;
 
     public OnionRouter(String _nm, String _ident, String _ip, int _orport, int _dirport) throws UnknownHostException {
         name = _nm;
@@ -49,15 +50,20 @@ public class OnionRouter {
         identityhash = _ident;
     }
 
-    public PublicKey getPubKey() throws IOException {
-        if (pubKey != null)
-            return pubKey;
+    public void fetchDescriptor() throws IOException {
         TorDocumentParser rdr = new TorDocumentParser(Consensus.getConsensus().getRouterDescriptor(identityhash));
 
-        pubKeyraw = Base64.decodeBase64(rdr.getItem("onion-key"));
-        pubKey = TorCrypto.asn1GetPublicKey(pubKeyraw);
+        onionKeyRaw = Base64.decodeBase64(rdr.getItem("onion-key"));
+        onionKey = TorCrypto.asn1GetPublicKey(onionKeyRaw);
+        signKeyRaw = Base64.decodeBase64(rdr.getItem("signing-key"));
 
-        return pubKey;
+    }
+
+    public PublicKey getOnionKey() throws IOException {
+        if (onionKey == null)
+            fetchDescriptor();
+
+        return onionKey;
     }
 
     public Boolean acceptsIPv4ExitPort(int exitPort) {
