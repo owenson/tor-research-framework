@@ -50,7 +50,9 @@ HOST_NAME = IP4_ADDR | IP6_ADDR | DNS_NAME
 # 0 generally represents an illegal or unavailable port
 PORT = “1” - “65535”
 
-TOR_BASE_URL = HTTP_SCHEME SCHEME_SEP NET_PATH HOST_NAME [ COLON PORT ] SLASH “tor” SLASH
+# tolerate the http[s] proxy style of putting the hostname in the url
+# If the url doesn't start with "/tor/", rewrite it
+TOR_BASE_URL = [ HTTP_SCHEME SCHEME_SEP NET_PATH HOST_NAME [ COLON PORT ] ] [ SLASH “tor” ] SLASH
 
 
 Download from Directory Caches: (Download URLs)
