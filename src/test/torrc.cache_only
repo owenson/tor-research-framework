@@ -23,7 +23,8 @@ DataDirectory /test/tor/tor-features-data
 
 PidFile /test/tor/tor-features-data/tor.pid
 
-# Log debug for the domains we're testing to stderr and the data drectory
+# Log debug for the domains we're testing to stderr and the data directory
+#Log info [net,dir,http,dirserv]debug stderr
 Log notice [net,dir]info [http,dirserv]debug stderr
 Log notice [net,dir]info [http,dirserv]debug file /test/tor/tor-features-data/stderr.log
 Log info [net,dir,http,dirserv]debug file /test/tor/tor-features-data/debug.log
