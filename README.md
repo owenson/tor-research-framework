@@ -1,6 +1,6 @@
 tor-research-framework
 ======================
-by Gareth Owen (drgowen@gmail.com - www.ghowen.me)
+by Gareth Owen (gho-github@ghowen.me - www.ghowen.me)
 
 LICENCE: GNU GPL v3
 
