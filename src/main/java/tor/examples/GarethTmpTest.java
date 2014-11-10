@@ -1,9 +1,11 @@
 package tor.examples;
 
+import org.apache.commons.io.FileUtils;
 import org.bouncycastle.util.encoders.Base64;
 import org.bouncycastle.util.encoders.Hex;
 import tor.*;
 
+import java.io.File;
 import java.io.IOException;
 import java.security.PublicKey;
 
@@ -28,10 +30,15 @@ public class GarethTmpTest {
                 return TorCrypto.asn1GetPublicKey(Hex.decode("308188028180b688aa6b6222bb9dadd4e33a9176c35ca81196cbd80aec8046cbdfc92050363450bfbda3c93c086bda6e62e4f0033c041746f81ed5bc304fd501444d8f47ee249425955267689787d7997734014575b75fcb658d46beea36b82e4b28824e7f4e4ba880051cae34e0d973dc4e04edbbe392f76274d5ade909d42e3e63217b50f90203010001"));
             }
         };
-        TorSocket sock = new TorSocket(localhostOR); //Consensus.getConsensus().getRandomORWithFlag("Guard,Fast"));
-        TorCircuit circ = sock.createCircuit(true);
-        circ.create();
-        circ.extend(resfwserver);
+        //TorSocket sock = new TorSocket(localhostOR); //Consensus.getConsensus().getRandomORWithFlag("Guard,Fast"));
+        TorSocket sock = new TorSocket(con.getRandomORWithFlag("Guard,Fast,Running"));
+        for (Object onion : FileUtils.readLines(new File("/home/gho/Downloads/toponions"))) {
+            System.out.println("Fetcing '"+onion+"'");
+            System.out.println(HiddenService.fetchHSDescriptor(sock, (String)onion));
+        }
+        //TorCircuit circ = sock.createCircuit(true);
+        //circ.create();
+        //circ.extend(resfwserver);
 //        String hsdsec = HiddenService.fetchHSDescriptor(sock, "3g2upl4pq6kufc4m");
 //        FileWriter out = new FileWriter("duckduckgo.hsdesc");
 //        out.write(hsdsec);

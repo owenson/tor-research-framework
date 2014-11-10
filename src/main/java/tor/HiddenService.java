@@ -26,6 +26,7 @@ import org.apache.commons.lang.ArrayUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.bouncycastle.util.encoders.Base64;
+import tor.util.TorCircuitException;
 import tor.util.TorDocumentParser;
 
 import java.io.IOException;
@@ -100,8 +101,13 @@ public class HiddenService {
 
             // establish circuit to responsible director
             TorCircuit circ = sock.createCircuit(true);
-            circ.create();
-            circ.extend(ors[0]);
+            try {
+                circ.create();
+                circ.extend(ors[0]);
+            } catch(TorCircuitException e) {
+                log.error("HS fetched failed due to circuit failure - moving to next directory");
+                continue;
+            }
 
             final int replica = i < 3 ? 0 : 1;
 
@@ -138,7 +144,11 @@ public class HiddenService {
             // wait for notification from the above listener that data is here! (that remote side ended connection - data could be blank
             synchronized (onion) {
                 try {
-                    onion.wait();
+                    onion.wait(1000);
+                    if(circ.state== TorCircuit.STATES.DESTROYED) {
+                        System.out.println("HS - Desc Fetch - Circuit Destroyed");
+                        throw new TorCircuitException("circuit destroyed");
+                    }
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }

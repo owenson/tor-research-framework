@@ -138,9 +138,11 @@ public class TorCircuit {
         while (true) {
             synchronized (stateNotify) {
                 try {
-                    stateNotify.wait();
-                    if (state == STATES.DESTROYED && desired != STATES.DESTROYED)
-                        log.exit("Waiting for unreachable state - circuit destroyed");
+                    stateNotify.wait(1000);
+                    if (state == STATES.DESTROYED && desired != STATES.DESTROYED) {
+                        log.error("Waiting for unreachable state - circuit destroyed");
+                        throw new TorCircuitException("circuit destroyed - waiting for unreachable state");
+                    }
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
