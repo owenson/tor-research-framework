@@ -104,7 +104,7 @@ public class TorCircuit {
     long sentBytes = 0;
     // this circuit hop
     private LinkedList<OnionRouter> circuitToBuild = new LinkedList<>();
-    private ArrayList<TorHop> hops = new ArrayList<>();
+    public ArrayList<TorHop> hops = new ArrayList<>();
     private Object stateNotify = new Object();
 
     public TorCircuit(TorSocket sock) {
@@ -175,7 +175,15 @@ public class TorCircuit {
     }
 
     public void create() throws IOException {
-        create(sock.firstHop);
+        if(sock.firstHop!=null)
+            create(sock.firstHop);
+        else {
+            setState(STATES.CREATING);
+            sock.sendCell(circId, Cell.CREATE_FAST, createFastPayload());
+
+            if (blocking)
+                waitForState(STATES.READY, true);
+        }
     }
 
     /**
@@ -215,6 +223,27 @@ public class TorCircuit {
         BigInteger pubKey = TorCrypto.DH_G.modPow(temp_x, TorCrypto.DH_P);
         byte pubKeyByte[] = TorCrypto.BNtoByte(pubKey);
         return TorCrypto.hybridEncrypt(pubKeyByte, r.getOnionKey());
+    }
+
+    byte temp_x_fast[];
+    private byte[] createFastPayload() {
+        temp_x_fast = new byte[20];
+        TorCrypto.rnd.nextBytes(temp_x_fast);
+        temp_r = null;
+        return temp_x_fast;
+    }
+
+    private void handleCreatedFast(byte pl[]) throws TorCircuitException {
+        byte temp_y[] = Arrays.copyOfRange(pl, 0, TorCrypto.HASH_LEN);
+        byte kh[] = Arrays.copyOfRange(pl, TorCrypto.HASH_LEN, TorCrypto.HASH_LEN*2);
+
+        // derive key data data
+        byte kdf[] = TorCrypto.torKDF(ArrayUtils.addAll(temp_x_fast, temp_y), 3 * TorCrypto.HASH_LEN + 2 * TorCrypto.KEY_LEN);
+
+        // ad hop
+        hops.add(new TorHop(kdf, kh, temp_r));
+
+        setState(STATES.READY);
     }
 
     /**
@@ -432,6 +461,16 @@ public class TorCircuit {
         sock.sendCell(circId, Cell.DESTROY, null);
     }
 
+    public void rendezvous2Setup(byte[] cookie) throws IOException {
+        byte buf[] = new byte[128+20+20];
+        ByteBuffer buf2 = ByteBuffer.wrap(buf);
+        buf2.put(cookie);
+
+        // TODO - actual handshake!
+
+        send(buf, RELAY_COMMAND_RENDEZVOUS1, false, (short)0);
+    }
+
     /**
      * Set the digest to zero for a relay payload - used by hash calculation code in handleReceived()
      *
@@ -471,6 +510,10 @@ public class TorCircuit {
             }
 
             handled = true;
+        } else if(c.cmdId == Cell.CREATED_FAST) {
+            handleCreatedFast(c.payload);
+            log.debug("Created-fast");
+            handled=true;
         } else if (c.cmdId == Cell.RELAY_EARLY || c.cmdId == Cell.PADDING || c.cmdId == Cell.VPADDING) { // these are used in deanon attacks
             log.error("WARNING**** cell CMD " + c.cmdId + " received in - Possible DEANON attack!!: Route: " + hops.toArray());
         } else if (c.cmdId == Cell.RELAY) // relay cell
@@ -572,6 +615,7 @@ public class TorCircuit {
                 break;
 
             case RELAY_COMMAND_RENDEZVOUS2:
+                System.out.println("GOT RENDV1-----------------");
                 assert state == STATES.RENDEZVOUS_ESTABLISHED;
                 handleCreated(payload);
                 setState(STATES.RENDEZVOUS_COMPLETE);

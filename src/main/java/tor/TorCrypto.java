@@ -18,7 +18,9 @@
 */
 package tor;
 
+import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.lang.ArrayUtils;
+import org.bouncycastle.asn1.*;
 import org.bouncycastle.util.Arrays;
 
 import javax.crypto.BadPaddingException;
@@ -33,8 +35,12 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.security.*;
+import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.RSAPrivateKeySpec;
 import java.security.spec.RSAPublicKeySpec;
+import java.util.Enumeration;
 
 public class TorCrypto {
     public static SecureRandom rnd = new SecureRandom();
@@ -163,6 +169,59 @@ public class TorCrypto {
         }
     }
 
+    /**
+     * Parses a public key encoded as ASN.1
+     *
+     * @param rsapublickey ASN.1 Encoded public key
+     * @return PublicKey
+     */
+
+    public static RSAPrivateKey asn1GetPrivateKey(byte[] rsapkbuf) {
+        ASN1InputStream bIn = new ASN1InputStream(new ByteArrayInputStream(rsapkbuf));
+        try {
+            DLSequence obj = (DLSequence) bIn.readObject();
+            ASN1Integer mod = (ASN1Integer) obj.getObjectAt(1);
+            ASN1Integer pubExp = (ASN1Integer) obj.getObjectAt(2);
+            ASN1Integer privExp = (ASN1Integer) obj.getObjectAt(3);
+
+            RSAPrivateKey privKey = (RSAPrivateKey) KeyFactory.getInstance("RSA").generatePrivate(new RSAPrivateKeySpec(mod.getValue(), privExp.getValue()));
+            return privKey;
+        } catch (IOException | NoSuchAlgorithmException | InvalidKeySpecException e) {
+            e.printStackTrace();
+        }
+
+        return null;
+    }
+
+    // get public key from encoded private key
+    public static RSAPublicKey asn1GetPrivateKeyPublic(byte[] rsapkbuf) {
+        ASN1InputStream bIn = new ASN1InputStream(new ByteArrayInputStream(rsapkbuf));
+        try {
+            DLSequence obj = (DLSequence) bIn.readObject();
+            ASN1Integer mod = (ASN1Integer) obj.getObjectAt(1);
+            ASN1Integer pubExp = (ASN1Integer) obj.getObjectAt(2);
+            ASN1Integer privExp = (ASN1Integer) obj.getObjectAt(3);
+
+            RSAPublicKey pubKey = (RSAPublicKey) KeyFactory.getInstance("RSA").generatePublic(new RSAPublicKeySpec(mod.getValue(), pubExp.getValue()));
+            return pubKey;
+        } catch (IOException | NoSuchAlgorithmException | InvalidKeySpecException e) {
+            e.printStackTrace();
+        }
+
+        return null;
+    }
+
+
+    public static PublicKey pubKeyFromPrivate(RSAPrivateKey priv) {
+        try {
+            return KeyFactory.getInstance("RSA").generatePublic(new RSAPublicKeySpec(priv.getModulus(), new BigInteger("65537")));
+        } catch (InvalidKeySpecException e) {
+            e.printStackTrace();
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
     /**
      * Parses a public key encoded as ASN.1
      *

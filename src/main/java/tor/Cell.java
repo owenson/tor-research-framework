@@ -33,6 +33,8 @@ public class Cell {
     public static final int CREATED = 2;
     public static final int RELAY = 3;
     public static final int DESTROY = 4;
+    public static final int CREATE_FAST =  5;
+    public static final int CREATED_FAST =  6;
     public static final int NETINFO = 8;
     public static final int RELAY_EARLY = 9;
     public static final int VERSIONS = 7;

@@ -28,14 +28,14 @@ public class HiddenServiceExample {
 
     public static void main(String[] args) throws IOException {
         Consensus con = Consensus.getConsensus();
-        TorSocket sock = new TorSocket(con.getRouterByName("turtles"));
+        TorSocket sock = new TorSocket(con.getRandomORWithFlag("Guard"));
 
         // setup rendezvous circuit
         TorCircuit rendz = sock.createCircuit(true); //true means circuit calls should block until success
         rendz.createRoute("tor26");
         rendz.rendezvousSetup();
 
-        final String ONION = "3g2upl4pq6kufc4m";
+        final String ONION = "uy5t7cus7dptkchs";
 
         // send introduce to introduction point and wait for rendezvous circuit to complete
         HiddenService.sendIntroduce(sock, ONION, rendz);

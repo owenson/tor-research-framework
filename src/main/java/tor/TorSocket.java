@@ -32,6 +32,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
+import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.security.KeyManagementException;
@@ -72,12 +73,20 @@ public class TorSocket {
      * @param fh OnionRouter for first hop (used for Hostname/IP string and Port)
      */
     public TorSocket(OnionRouter fh) throws IOException {
-
-        if (consensus == null) consensus = Consensus.getConsensus();
-
         firstHop = fh;
         if (firstHop == null)
             log.exit("Invalid first-hop");
+
+        connSetup(firstHop.ip, firstHop.orport);
+    }
+
+    public TorSocket(InetAddress ip, int port) throws IOException {
+        firstHop = null;
+        connSetup(ip, port);
+    }
+
+    public void connSetup(InetAddress ip, int port) throws IOException {
+        if (consensus == null) consensus = Consensus.getConsensus();
 
         Security.addProvider(new BouncyCastleProvider());
         SSLContext sc;
@@ -90,11 +99,10 @@ public class TorSocket {
         }
 
         // connect
-        sslsocket = (SSLSocket) sc.getSocketFactory().createSocket(firstHop.ip, firstHop.orport);
+        sslsocket = (SSLSocket) sc.getSocketFactory().createSocket(ip, port);
 
         out = sslsocket.getOutputStream();
         in = sslsocket.getInputStream();
-
 
         // versions cell
         log.trace("Sending VERSIONS");

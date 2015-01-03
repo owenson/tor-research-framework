@@ -26,16 +26,22 @@ import org.apache.commons.lang.ArrayUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.bouncycastle.util.encoders.Base64;
+import tor.util.MiscUtil;
 import tor.util.TorCircuitException;
 import tor.util.TorDocumentParser;
 
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
-import java.security.MessageDigest;
-import java.security.PublicKey;
+import java.security.*;
+import java.security.interfaces.RSAPrivateKey;
+import java.security.interfaces.RSAPublicKey;
+import java.security.spec.RSAPublicKeySpec;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.TreeMap;
 
 /**
@@ -44,8 +50,8 @@ import java.util.TreeMap;
 public class HiddenService {
     final static Logger log = LogManager.getLogger();
 
-    // onion as base32 encoded, replica=[0,1],
-    public static byte[] getDescId(String onion, byte replica) {
+
+    public static byte[] getSecretId(String onion, byte replica) {
         byte[] onionbin = new Base32().decode(onion.toUpperCase());
         assert onionbin.length == 10;
 
@@ -61,7 +67,16 @@ public class HiddenService {
 
         MessageDigest md = TorCrypto.getSHA1();
         md.update(buf);
-        byte hashT[] = md.digest();
+        return md.digest();
+    }
+    // onion as base32 encoded, replica=[0,1],
+    public static byte[] getDescId(String onion, byte replica) {
+        byte[] onionbin = new Base32().decode(onion.toUpperCase());
+        assert onionbin.length == 10;
+
+        MessageDigest md = TorCrypto.getSHA1();
+
+        byte hashT[] = getSecretId(onion, replica);
 
         md = TorCrypto.getSHA1();
         return md.digest(ArrayUtils.addAll(onionbin, hashT)); //md.digest();
@@ -71,7 +86,7 @@ public class HiddenService {
         Consensus con = Consensus.getConsensus();
 
         // get list of nodes with HS dir flag
-        TreeMap<String, OnionRouter> routers = con.getORsWithFlag("HSDir");
+        TreeMap<String, OnionRouter> routers = con.getORsWithFlag("HSDir,V2Dir".split(","));
         Object keys[] = routers.keySet().toArray();
         Object vals[] = routers.values().toArray();
 
@@ -250,5 +265,54 @@ public class HiddenService {
 
         ipcirc.destroy(); // no longer needed
         log.debug("Hidden Service circuit built");
+    }
+
+    public static String publicKeyToOnion(RSAPublicKey pk) throws IOException {
+        byte []service = TorCrypto.getSHA1().digest(TorCrypto.publicKeyToASN1(pk));
+        String serviceb32 = new Base32().encodeAsString(Arrays.copyOfRange(service,0,10)).toLowerCase();
+        return serviceb32;
+    }
+
+    public static String generateHSDescriptor(byte[] privkey) throws IOException {
+        RSAPrivateKey pk = TorCrypto.asn1GetPrivateKey(privkey);
+        PublicKey puk = TorCrypto.asn1GetPrivateKeyPublic(privkey);
+        return generateHSDescriptor((RSAPublicKey) puk, pk);
+    }
+
+
+    public static String generateHSDescriptor(RSAPublicKey pk, RSAPrivateKey prk) throws IOException {
+        String serviceb32 = publicKeyToOnion(pk);
+
+        StringBuilder desc = new StringBuilder();
+        desc.append("rendezvous-service-descriptor "+new Base32().encodeAsString(getDescId(serviceb32, (byte)0)).toLowerCase()+"\n");
+        desc.append("version 2\n");
+        desc.append("permanent-key\n-----BEGIN RSA PUBLIC KEY-----\n");
+        desc.append(MiscUtil.stringMaxWidth(Base64.toBase64String(TorCrypto.publicKeyToASN1(pk)),64));
+        desc.append("\n-----END RSA PUBLIC KEY-----\n");
+        desc.append("secret-id-part "+new Base32().encodeAsString(getSecretId(serviceb32, (byte)0)).toLowerCase()+"\n");
+        DateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        desc.append("publication-time "+df.format(new Date())+"\n");
+        desc.append("protocol-versions 2,3\n");
+        desc.append("introduction-points\n" +
+                "-----BEGIN MESSAGE-----\n");
+        desc.append(MiscUtil.stringMaxWidth(Base64.toBase64String("nothing to see :-)".getBytes()),64));
+        desc.append("\n-----END MESSAGE-----\n" +
+                "signature\n");
+
+        byte sig[];
+        try {
+            Signature instance = Signature.getInstance("SHA1withRSA");
+            instance.initSign(prk);
+            instance.update(desc.toString().getBytes());
+            sig = instance.sign();
+        } catch (InvalidKeyException | NoSuchAlgorithmException |SignatureException e) {
+            e.printStackTrace();
+            return null;
+        }
+
+        desc.append("-----BEGIN SIGNATURE-----\n");
+        desc.append(MiscUtil.stringMaxWidth(Base64.toBase64String(sig),64));
+        desc.append("\n-----END SIGNATURE-----\n");
+        return desc.toString();
     }
 }
