@@ -20,29 +20,47 @@
 package tor;
 
 import tor.util.ByteFifo;
+import tor.util.TorInputStream;
+import tor.util.TorOutputStream;
 
 import java.io.IOException;
 import java.util.Arrays;
 
 public class TorStream {
 
-	int streamId;
-	TorCircuit circ;
+    int streamId;
+    TorCircuit circ;
 
-    public enum STATES { CONNECTING, READY, DESTROYED };
+    public enum STATES {CONNECTING, READY, DESTROYED}
+
+    ;
     STATES state = STATES.CONNECTING;
 
-	ByteFifo recv = new ByteFifo(4096);
-	TorStreamListener listener;
+    public ByteFifo recvBuffer = new ByteFifo(16384);
+    TorStreamListener listener;
 
     int recvWindow = 500;
     final static int recvWindowIncrement = 50;
-	
-	public TorStream(int streamId, TorCircuit circ, TorStreamListener list) {
-		this.streamId = streamId;
-		this.circ = circ;
-		listener = list;
-	}
+
+    public TorInputStream getInputStream() {
+        return in;
+    }
+
+    public TorOutputStream getOutputStream() {
+        return out;
+    }
+
+    TorInputStream in;
+    TorOutputStream out;
+
+    public TorStream(int streamId, TorCircuit circ, TorStreamListener list) {
+        this.streamId = streamId;
+        this.circ = circ;
+        listener = list;
+
+        in = new TorInputStream(this);
+        out = new TorOutputStream(this);
+    }
 
     public void setState(STATES newState) {
         synchronized (this) {
@@ -52,112 +70,123 @@ public class TorStream {
     }
 
     public void sendHTTPGETRequest(String url, String host) throws IOException {
-        send(("GET "+url+" HTTP/1.1\r\nHost: "+host+"\r\n\r\n").getBytes());
+        send(("GET " + url + " HTTP/1.1\r\nHost: " + host + "\r\n\r\n").getBytes());
     }
 
-    public void waitForState(STATES desired) {
-        while(true) {
+    public void waitForState(STATES desired) throws IOException {
+        while (true) {
             synchronized (this) {
                 try {
-                    this.wait();
+                    this.wait(1000);
+                    if (state == STATES.DESTROYED && desired != STATES.DESTROYED)
+                        throw new IOException("Waiting for unreachable state - circuit destroyed");
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
             }
-            if(state.equals(desired))
+            if (state.equals(desired))
                 return;
         }
     }
-	/**
-	 * Get received data from this stream (e.g. data received from remote end)
-	 * 
-	 * @param bytes How many bytes? -1 for max.
-	 * 
-	 * @return Received bytes
-	 */
-	public byte[] recv(int bytes, boolean block) throws IOException {
-        if(recv.isEmpty() && state == STATES.DESTROYED)
-            throw new IOException("stream destroyed");
+
+    /**
+     * Reads from receive buffer, blocking until bytes available.
+     *
+     * @param output
+     * @param block
+     * @return bytes received
+     * @throws IOException
+     */
+    public synchronized int recv(byte output[], boolean block) throws IOException {
         if (block) {
             synchronized (this) {
-                while (recv.isEmpty()) {
+                while (recvBuffer.isEmpty() && state != STATES.DESTROYED) {
                     try {
-                        wait();
+                        wait(1000);
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
                 }
             }
         }
-		return recv.get(bytes);
-	}
 
-	
-	/**
-	 * Send bytes down this stream
-	 * 
-	 * @param b Bytes to send
-	 */
-	public void send(byte b[]) throws IOException {
-        if(state == STATES.DESTROYED)
+        if (recvBuffer.isEmpty() && state == STATES.DESTROYED)
+            return -1;
+
+        byte out[] = recvBuffer.get(output.length);
+        System.arraycopy(out, 0, output, 0, out.length);
+        return out.length;
+    }
+
+
+    /**
+     * Send bytes down this stream
+     *
+     * @param b Bytes to send
+     */
+    public void send(byte b[]) throws IOException {
+        if (state == STATES.DESTROYED)
             throw new IOException("stream destroyed");
 
-        final int maxDataLen = 509-1-2-2-4-2;
-        for(int i=0; i<Math.ceil(b.length/(double)maxDataLen)*maxDataLen; i+=maxDataLen) {
+        final int maxDataLen = 509 - 1 - 2 - 2 - 4 - 2;
+        for (int i = 0; i < Math.ceil(b.length / (double) maxDataLen) * maxDataLen; i += maxDataLen) {
             byte data[] = Arrays.copyOfRange(b, i, Math.min(b.length, i + maxDataLen));
             circ.send(data, TorCircuit.RELAY_DATA, false, (short) streamId);
         }
-	}
+    }
 
     public void destroy() throws IOException {
-        if(state == STATES.DESTROYED)
+        if (state == STATES.DESTROYED)
             return; // don't redo!
         setState(STATES.DESTROYED);
-        circ.send(new byte[] {6}, TorCircuit.RELAY_END, false, (short)streamId);
+        circ.send(new byte[]{6}, TorCircuit.RELAY_END, false, (short) streamId);
         circ.streams.remove(new Integer(streamId));
     }
-	
-	/**
-	 * Internal function. Used to add received bytes to object.
-	 * 
-	 * @param b Bytes
-	 */
-	protected void _putRecved(byte b[]) {
+
+    /**
+     * Internal function. Used to add received bytes to object.
+     *
+     * @param b Bytes
+     */
+    protected void _putRecved(byte b[]) {
         recvWindow--;
-        if(recvWindow < 450) {
+        if (recvWindow < 450) {
             try {
                 //System.out.println("sent SENDME (STREAM) "+recvWindow);
-                circ.send(null, TorCircuit.RELAY_SENDME, false, (short)streamId);
+                circ.send(null, TorCircuit.RELAY_SENDME, false, (short) streamId);
             } catch (IOException e) {
                 e.printStackTrace();
             }
             recvWindow += recvWindowIncrement;
         }
 
-		recv.put(b);
-		if(listener != null)
-			listener.dataArrived(this);
+        recvBuffer.put(b);
         synchronized (this) {
             this.notifyAll();
         }
-	}
-	
-	public void notifyDisconnect() {
+        if (listener != null)
+            listener.dataArrived(this);
+    }
+
+    public void notifyDisconnect() {
         setState(STATES.DESTROYED);
-		if(listener != null)
-			listener.disconnected(this);
-	}
-	
-	public void notifyConnect() {
+        if (listener != null)
+            listener.disconnected(this);
+    }
+
+    public void notifyConnect() {
         setState(STATES.READY);
-		if(listener != null)
-			listener.connected(this);
-	}
-	
-	public interface TorStreamListener {
-		public void dataArrived(TorStream s);
-		public void connected(TorStream s);
-		public void disconnected(TorStream s);
-		public void failure(TorStream s);
-	}
+        if (listener != null)
+            listener.connected(this);
+    }
+
+    public interface TorStreamListener {
+        public void dataArrived(TorStream s);
+
+        public void connected(TorStream s);
+
+        public void disconnected(TorStream s);
+
+        public void failure(TorStream s);
+    }
 }

@@ -1,0 +1,235 @@
+Tor Directory URL Specification
+
+Tim Wilson-Brown, July 2014
+Based on tor-research-framework by Dr Gareth Owen
+Based on the Tor directory specification
+
+Definitions:
+# ASCII characters defined in hex
+SP = 0x20
+HT = 0x09
+CR = 0x0D
+LF = 0x0A
+CRLF = CR LF
+# HTTP 1.0 spec Section 2.2 - http://www.w3.org/Protocols/HTTP/1.0/spec.html
+# Yes, multi-line whitespace is permitted but discouraged
+WS = [CRLF?] ( SP | HT? )+
+
+COLON = “:”
+SLASH = “/“
+
+# HTTP 1.0, 1.1, and 2.0 include a version
+# If there is no version, 0.9 is assumed
+# Is specifying 0.9 ok?
+HTTP_VERSION = "HTTP" SLASH ( “0.9”? | “1.0” | “1.1” | “2.0” )
+# HTTP 0.9 only supports GET
+GET_METHOD = “GET”
+DOWNLOAD_METHOD = ( GET_METHOD | “HEAD” )
+# HTTP uses POST, HTTPS uses PUT
+UPLOAD_METHOD = ( “POST” | “PUT”? )
+# Do any directories support https?
+HTTP_SCHEME = ( “http” | “https”? )
+
+SCHEME_SEP = COLON
+NET_PATH = SLASH SLASH
+
+# Textual representation of numeric 0 - 255
+IP4_BYTE = “0” - “255”
+DOT = “.”
+IP4_ADDR = IP4_BYTE DOT IP4_BYTE DOT IP4_BYTE DOT IP4_BYTE
+# TODO - deferred
+IP6_ADDR = refer to standard
+# Section 11, http://www.ietf.org/rfc/rfc2181.txt
+# Binary representation of octets 0x00 - 0xFF
+DNS_OCTET = 0x00 - 0xFF
+DNS_LABEL = ( DNS_OCTET ){1-63}
+# The total length of dns_name must be between 0 and 255 octets (characters)
+DNS_NAME = ( DNS_LABEL DOT )* DNS_LABEL [DOT] | [DOT] with a length of 0-255
+HOST_NAME = IP4_ADDR | IP6_ADDR | DNS_NAME
+# Textual representation of numeric 1 - 65535
+# 0 generally represents an illegal or unavailable port
+PORT = “1” - “65535”
+
+# tolerate the http[s] proxy style of putting the hostname in the url
+# If the url doesn't start with "/tor/", rewrite it
+TOR_BASE_URL = [ HTTP_SCHEME SCHEME_SEP NET_PATH HOST_NAME [ COLON PORT ] ] [ SLASH “tor” ] SLASH
+
+
+Download from Directory Caches: (Download URLs)
+# As of 2.6, tor's maximum HTTP header size is 50,000 
+
+# From Section 3.3 of http://www.w3.org/Protocols/HTTP/1.0/spec.html
+HTTP_DATE = <One of the following:>
+# Preferred: RFC 822, updated by RFC 1123
+	Sun, 06 Nov 1994 08:49:37 GMT
+# Obsoleted: RFC 850, obsoleted by RFC 1036
+	Sunday, 06-Nov-94 08:49:37 GMT
+# Accept but don’t Generate: ANSI C's asctime() format
+	Sun Nov  6 08:49:37 1994
+
+# The If-Modified-Since header is often used by Tor
+IF_MOD_SINCE = “If-Modified-Since” COLON WS HTTP_DATE
+
+# <Download Path> is the path portion of any URL listed below
+# (i.e. anything that is not a definition [definitions contain ‘=‘ ])
+# HTTP 0.9 only supports GET, and has no version.
+# Even though 0.9 is part of the HTTP 1.0 spec, tor doesn’t seem to support it.
+DL_HTTP_09 = GET_METHOD WS <Download Path> CRLF
+DL_HTTP_10 = DOWNLOAD_METHOD WS <Download Path> WS HTTP_VERSION CRLF CRLF
+DL_CONDITIONAL = GET_METHOD WS <Download Path> WS HTTP_VERSION CRLF \
+			IF_MOD_SINCE CRLF CRLF
+
+# To download, connect to the host and port (default 80) specified in the URL
+# Then issue the DOWNLOAD_COMMAND
+DOWNLOAD_COMMAND = ( DL_HTTP_09 | DL_HTTP_10 | DL_CONDITIONAL )
+
+Z = “.z”
+
+PLUS = “+”
+
+HEX_BYTE_TEXT = “00” - “FF” | “00” - “ff”
+# Only for requesting consensuses via an authority
+# 6 uppercase characters (3 bytes) is canonical
+AUTH_FP = ( HEX_BYTE_TEXT ){1-20}
+FINGERPRINT = ( HEX_BYTE_TEXT ){20}
+
+# A server (router or authority) identity key fingerprint
+ID_FP = FINGERPRINT
+# Due to squid proxy url limitations 
+# at most 96 fingerprints (6-character?)
+# can be retrieved in a single request.
+# The non-proxy limit actually around 1300.
+ID_LIST = ID_FP ( PLUS ID_FP ){0-95}
+
+# There are no specific limits placed on this
+# But in reality, there are 10-15 authorities
+# What about duplicate IDs? With different lengths?
+# What about identical byte patterns?
+AUTH_LIST = AUTH_FP ( PLUS AUTH_FP )*
+
+DASH = “-“
+
+
+# “microdesc” in spec, “micro” in digest path
+FLAVOR = “ns” | “microdesc”
+
+# “next” is for authorities only
+STATUS = ( “current” | “next” )
+STATUS_BASE_URL = TOR_BASE_URL “status-vote” SLASH STATUS SLASH
+
+STATUS_BASE_URL “consensus” [ Z ]
+# Servers will only return a consensus if more than half of the requested
+# authorities have signed the document, otherwise a 404 error
+STATUS_BASE_URL “consensus” SLASH AUTH_LIST [ Z ]
+STATUS_BASE_URL “consensus” DASH FLAVOR [ Z ]
+# It's not clear from the spec, but AUTH_LIST makes sense here
+STATUS_BASE_URL “consensus” DASH FLAVOR SLASH AUTH_LIST [ Z ]
+
+
+# The spec is ambiguous here:
+# How many digests are permitted? (due to squid?)
+SIG_DIGEST = ( HEX_BYTE_TEXT ){20}
+SIG_DIGEST_LIST = SIG_DIGEST ( PLUS SIG_DIGEST ){0-??}
+
+SERVER_BASE_URL = TOR_BASE_URL “server” SLASH
+
+SERVER_BASE_URL “fp” SLASH ID_LIST [ Z ]
+SERVER_BASE_URL “d” SLASH SIG_DIGEST_LIST [ Z ]
+# despite its name, the server authority 
+# simply serves the local descriptor
+SERVER_BASE_URL “authority” [ Z ]
+SERVER_BASE_URL “all” [ Z ]
+
+
+# We assume base64 from RFC 4648 here - but does everyone?
+# A microdescriptor digest is SHA-256 encoded into 6-bit base64
+# with no trailing equals signs
+# Note: these digests contain slashes, 
+# which are otherwise used as path separators
+BASE64_CHAR = “A” - “Z” | “a” - “z” | “0” - “9” | PLUS | SLASH
+MICRO_DIGEST = ( BASE64_CHAR ){43}
+# Due to squid proxy url limitations 
+# at most 92 (43 character?) microdescriptor hashes 
+# can be retrieved in a single request.
+
+MICRO_LIST = MICRO_DIGEST ( DASH MICRO_DIGEST ){0-91}
+
+TOR_BASE_URL “micro” SLASH “d” SLASH MICRO_LIST [ Z ]
+
+
+# A server (router or authority) signing key fingerprint
+SK_FP = FINGERPRINT
+# Due to squid proxy url limitations 
+# at most 96 fingerprints (6-character?)
+# can be retrieved in a single request.
+SK_LIST = SK_FP ( PLUS SK_FP ){0-95}
+
+# Squid proxy limitations are not specified, but 
+# 48 x 2-part fingerprints would be equivalent to 
+# 96 x 1-part fingerprints
+ID_SK = ID_FP DASH SK_FP
+ID_SK_LIST = ID_SK ( PLUS ID_SK ){0-47?}
+
+KEYS_BASE_URL = TOR_BASE_URL “keys” SLASH
+
+# Are ID_LISTs or SK_LISTs permitted here?
+KEYS_BASE_URL “fp” SLASH ID_FP [ Z ]
+KEYS_BASE_URL “sk” SLASH SK_FP [ Z ]
+KEYS_BASE_URL “fp-sk” SLASH ID_SK [ Z ]
+KEYS_BASE_URL “fp-sk” SLASH ID_SK_LIST [ Z ]
+KEYS_BASE_URL “all” [ Z ]
+
+
+EXTRA_BASE_URL = TOR_BASE_URL “extra” SLASH
+
+# The spec is ambiguous:
+# Is ID_LIST or just ID_FP permitted here?
+EXTRA_BASE_URL “fp” SLASH ID_LIST [ Z ]
+# Is SIG_DIGEST_LIST permitted here?
+EXTRA_BASE_URL “d” SLASH SIG_DIGEST_LIST [ Z ]
+EXTRA_BASE_URL “authority” [ Z ]
+EXTRA_BASE_URL “all” [ Z ]
+
+
+Download from Authorities Only: (Download URLs)
+
+KEYS_BASE_URL authority [ Z ]
+# Votes of self, FP, and digest
+STATUS_BASE_URL “authority” [ Z ]
+STATUS_BASE_URL ID_FP [ Z ]
+STATUS_BASE_URL “d” SLASH SIG_DIGEST [ Z ]
+# Detached signatures
+STATUS_BASE_URL “consensus-signatures” [ Z ]
+
+
+Submission to Authorities: (Upload URLs)
+# As of 2.6, tor's maximum HTTP body (upload) size is 16MiB - 1 byte
+# Starting several uploads at once could choke RAM on constrained systems
+# (Which, of course, any authorities should not be)
+
+CONTENT_LENGTH = “Content-Length” COLON WS ( “0” - “9” ) +
+CONTENT_ENCODING = “Content-Encoding” COLON WS ( “deflate" | "identity" | ? )
+
+# TODO: the upload data may need to be encoded
+UPLOAD_DATA = ( OCTET ) *
+
+# <Upload Path> is the path portion of any URL listed below
+# (i.e. anything that is not a definition [definitions contain ‘=‘ ])
+# POST is only permitted in HTTP 1.0+, which must have an HTTP_VERSION
+# Is CONTENT_ENCODING required by tor in POST requests?
+# Can we encode descriptors using deflate? (Or base64?)
+
+# To upload, connect to the host and port (default 80) specified in the URL
+# Then issue the UPLOAD_COMMAND
+UPLOAD_COMMAND = UPLOAD_METHOD WS <Upload Path> WS HTTP_VERSION CRLF \
+		CONTENT_LENGTH CRLF \
+		[ CONTENT_ENCODING CRLF ] CRLF \
+		UPLOAD_DATA
+
+# Descriptors post to the base URL “/tor/“
+# It has a terminating slash, the other post URLs don’t
+TOR_BASE_URL
+# Authority Votes
+TOR_BASE_URL “post” SLASH “vote”
+# Authority Detached Signatures
+TOR_BASE_URL “post” SLASH “consensus-signature”

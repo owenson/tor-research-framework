@@ -20,49 +20,39 @@ package tor.examples;
 
 import tor.*;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 
 public class HiddenServiceExample {
 
-    public static void main(String[] args) throws IOException  {
+    public static void main(String[] args) throws IOException {
         Consensus con = Consensus.getConsensus();
-        TorSocket sock = new TorSocket(con.getRouterByName("turtles"));
+        TorSocket sock = new TorSocket(con.getRandomORWithFlag("Guard"));
 
         // setup rendezvous circuit
         TorCircuit rendz = sock.createCircuit(true); //true means circuit calls should block until success
         rendz.createRoute("tor26");
         rendz.rendezvousSetup();
 
-        final String ONION = "3g2upl4pq6kufc4m";
+        final String ONION = "uy5t7cus7dptkchs";
 
         // send introduce to introduction point and wait for rendezvous circuit to complete
         HiddenService.sendIntroduce(sock, ONION, rendz);
 
         // Connect to hidden service on port 80 and download a page
-        rendz.createStream("", 80, new TorStream.TorStreamListener() {
-            @Override
-            public void dataArrived(TorStream s) {
-                try {
-                    System.out.println(new String(s.recv(1024, false)));
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-
-            @Override
-            public void connected(TorStream s) {
-                try {
-                    s.sendHTTPGETRequest("/", ONION+".onion");
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-
-            @Override public void disconnected(TorStream s) {  }
-            @Override public void failure(TorStream s) {  }
-        });
+        TorStream hiddenServiceStream = rendz.createStream("", 80, null);
+        hiddenServiceStream.waitForState(TorStream.STATES.READY);
+        hiddenServiceStream.sendHTTPGETRequest("/", ONION + ".onion");
 
         System.out.println("HS - fetching index.html...");
+
+        BufferedReader rdr = new BufferedReader(new InputStreamReader(hiddenServiceStream.getInputStream()));
+
+        String line;
+        while ((line = rdr.readLine()) != null)
+            System.out.println(line);
+
 
     }
 

@@ -28,28 +28,33 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 
 /**
- * Created by gho on 26/07/14.
+ * Created by twilsonb on 29/07/2014.
+ * Based on SimpleExample created by gho on 26/07/14.
  */
-public class SimpleExample {
+public class RandomRouteExample {
     public static void main(String[] args) throws IOException {
         Consensus con = Consensus.getConsensus();
-        TorSocket sock = new TorSocket(con.getRouterByName("turtles"));
+        // If you're having speed issues, try adding "Fast" to the lists of flags below.
+        TorSocket sock = new TorSocket(con.getRandomORWithFlag("Guard,Running,Valid"));
+        //TorSocket sock = new TorSocket(con.getRouterByName("turtles"));
         TorCircuit circ = sock.createCircuit(true);
 
-        // use createRoute as below, or you can use create() followed by extend() manually
-        //circ.create();
-        //circ.extend(con.getRandomORWithFlag("Exit"));
+        System.out.println("\n===================");
+        System.out.println("Creating to first hop");
+        circ.create();
+        System.out.println("\n===================");
+        System.out.println("Extending to middle");
+        circ.extend(con.getRandomORWithFlag("Running,Valid"));
 
-        System.out.println("==========================");
-        System.out.println("Creating route through tor");
-        circ.createRoute("Snowden4ever,abbie");
+        System.out.println("\n=================");
+        System.out.println("Extending to exit");
+        circ.extend(con.getRandomORWithFlag("Exit,Running,Valid".split(","), 80));
 
         TorStream stream = circ.createStream("ghowen.me", 80, null);
         stream.waitForState(TorStream.STATES.READY);
 
-        System.out.println("====================================");
-        System.out.println("Connected to remote host through tor");
-
+        System.out.println("\n====================================");
+        System.out.println("Connected to remote host through Tor");
         stream.sendHTTPGETRequest("/ip", "ghowen.me");
 
         BufferedReader rdr = new BufferedReader(new InputStreamReader(stream.getInputStream()));
