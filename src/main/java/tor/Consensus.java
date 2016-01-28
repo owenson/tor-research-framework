@@ -311,6 +311,10 @@ public class Consensus {
                     // tolerate extra junk at the end of the line
                     if (lineSplit.length >= 3)
                         cur.consensusIPv4ExitPortSummary = lineSplit[1] + " " + lineSplit[2];
+                } else if (ln.startsWith("v") && cur != null) { // version
+                	String[] lineSplit = ln.split(" ");
+                	if (lineSplit.length >= 3){
+                		cur.version = lineSplit[1] + " " + lineSplit[2];
                 }
             }
         } catch (MalformedURLException e) {

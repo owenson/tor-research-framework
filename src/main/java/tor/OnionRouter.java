@@ -36,6 +36,7 @@ public class OnionRouter {
     public String consensusIPv4ExitPortSummary = null;
     public String[] descriptorIPv4ExitPolicy = null;
     public String[] parsedIPv4ExitPortList = null;
+    public String version = null;
     String name;
     InetAddress ip;
     int orport;
@@ -48,6 +49,15 @@ public class OnionRouter {
         orport = _orport;
         dirport = _dirport;
         identityhash = _ident;
+    }
+    
+    public OnionRouter(String _nm, String _ident, String _ip, int _orport, int _dirport, String _version) throws UnknownHostException {
+    	name = _nm;
+        ip = InetAddress.getByName(_ip);
+        orport = _orport;
+        dirport = _dirport;
+        identityhash = _ident;
+        version = _version;
     }
 
     public void fetchDescriptor() throws IOException {
